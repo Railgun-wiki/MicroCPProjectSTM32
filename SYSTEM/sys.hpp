@@ -44,11 +44,11 @@ enum class AlarmState : uint8_t {
 
 // 系统全局临界区中断锁
 inline void EnterCritical() {
-    __disable_irq();
+    __asm volatile ("cpsid i" : : : "memory");
 }
 
 inline void ExitCritical() {
-    __enable_irq();
+    __asm volatile ("cpsie i" : : : "memory");
 }
 
 } // namespace Sys
