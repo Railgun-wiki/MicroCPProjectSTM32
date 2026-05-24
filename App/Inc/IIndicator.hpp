@@ -1,5 +1,6 @@
 // App/Inc/IIndicator.hpp
 #pragma once
+#include <stdint.h>
 
 namespace App {
 
