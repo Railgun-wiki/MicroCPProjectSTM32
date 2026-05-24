@@ -1,5 +1,7 @@
 # STM32 C++ 项目设计与开发规范 (MicroCPProjectSTM32)
 
+> **导航中心**： [📚 文档主页](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/README.md) | [📐 设计与开发规范](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/Specification.md) | [🔌 API 接口与类参考手册](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/API.md)
+
 本项目致力于在 STM32F103 主控平台上，构建一套**高复用性、低耦合性、面向对象**的优质嵌入式系统固件。为了保证团队协作的高效性以及软件架构的优雅度，本规范确立了 C++ 开发标准、目录职责划分、系统宏定义管理以及基于虚函数的依赖注入解耦机制。
 
 ---
@@ -39,6 +41,7 @@ MicroCPProjectSTM32/
 ├── SYSTEM/             <-- 系统级全局宏定义目录 (仅含唯一头文件 sys.hpp)
 │   └── sys.hpp
 ├── Drivers/            <-- ST 官方提供的 HAL 库与 CMSIS 驱动 (C 语言)
+├── Docs/               <-- 系统设计、规范与 API 接口参考文档中心
 └── CMakeLists.txt      <-- 主构建文件
 ```
 
@@ -53,6 +56,8 @@ MicroCPProjectSTM32/
     *   **作用**：作为“适配器（Adapter）”，实现 `App/` 中定义的虚接口。这里可以包含 STM32 的 HAL 库头文件，编写软件 I2C 控制时序、PWM 寄存器操作以及具体的物理传感器通信协议。
 4.  **`Core/` 与 `Drivers/`（底层基座）**：
     *   由 STM32CubeMX 工具维护，用于配置 MCU 时钟、底层引脚复用和串口中断等基座工作。
+5.  **`Docs/`（系统文档中心）**：
+    *   **作用**：集中管理整个项目的设计规范、接口文档、协作方案等，提供多页间的便捷导航与技术指南。
 
 ---
 
