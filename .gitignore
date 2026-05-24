@@ -23,9 +23,7 @@
 /.settings/
 
 # VS Code
-.vscode/ipch/
-.vscode/browse.vc.db
-.vscode/*.log
+/.vscode/
 
 # Clangd
 .cache/
