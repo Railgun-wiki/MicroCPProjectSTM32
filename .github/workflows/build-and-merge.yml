@@ -1,0 +1,45 @@
+name: STM32 C++ Build & Auto-Merge
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build Firmware
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Install ARM Toolchain & CMake
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          gcc-arm-none-eabi \
+          binutils-arm-none-eabi \
+          libnewlib-arm-none-eabi \
+          libstdc++-arm-none-eabi-newlib
+
+    - name: Configure CMake
+      run: |
+        cmake -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake -B build
+
+    - name: Build Project
+      run: |
+        cmake --build build --config Debug
+
+    - name: Auto-merge PR on Success
+      if: github.event_name == 'pull_request' && success()
+      run: |
+        gh pr merge --auto --merge "${{ github.event.pull_request.html_url }}"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
