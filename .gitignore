@@ -1,3 +1,31 @@
-build
-mx.scratch
-!.settings
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.o
+*.obj
+
+# Toolchain outputs
+*.elf
+*.hex
+*.bin
+*.map
+*.su
+*.lst
+
+# Build directories
+/build/
+/cmake-build-debug/
+/cmake-build-release/
+
+# STM32CubeMX / STM32CubeIDE
+/mx.scratch
+/.settings/
+
+# VS Code
+.vscode/ipch/
+.vscode/browse.vc.db
+.vscode/*.log
+
+# Clangd
+.cache/
