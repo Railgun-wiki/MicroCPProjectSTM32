@@ -4,6 +4,7 @@
 #include "IPressureSensor.hpp"
 #include "IIndicator.hpp"
 #include "IButton.hpp"
+#include "ILcdDisplay.hpp"
 #include "sys.hpp"
 
 namespace App {
@@ -11,7 +12,7 @@ namespace App {
 class AppController {
 public:
     // 依赖注入：在构造时引入所有解耦后的虚接口引用，彻底隔绝底层硬件实现
-    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute);
+    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd);
     
     // 初始化应用控制器，复位状态机与传感器参数
     void setup();
@@ -49,6 +50,7 @@ private:
     IIndicator& m_led;
     IButton& m_keyPage;
     IButton& m_keyMute;
+    ILcdDisplay& m_lcd;
 
     TelemetryData m_data;
     

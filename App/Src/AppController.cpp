@@ -3,12 +3,13 @@
 
 namespace App {
 
-AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute)
+AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd)
     : m_th(th)
     , m_press(press)
     , m_led(led)
     , m_keyPage(keyPage)
     , m_keyMute(keyMute)
+    , m_lcd(lcd)
 {
 }
 
@@ -18,6 +19,9 @@ void AppController::setup()
     
     // 初始化指示灯
     m_led.turnOff();
+
+    // 初始化 LCD
+    m_lcd.init();
     
     // 自检温湿传感器
     if (m_th.init() == Sys::Status::OK) {
@@ -50,6 +54,22 @@ void AppController::run()
     
     // 3. 执行状态机并更新系统指标
     updateStateMachine();
+
+    // 4. 刷新 LCD 显示 (将 TelemetryData 转换为 ILcdDisplay::RenderData 传递给 LCD 进行调试渲染)
+    ILcdDisplay::RenderData renderData {
+        m_data.temperature,
+        m_data.humidity,
+        m_data.pressure,
+        m_data.altitude,
+        m_data.tempHighLimit,
+        m_data.tempLowLimit,
+        m_data.pressHighLimit,
+        m_data.pressLowLimit,
+        m_data.alarmState,
+        m_data.currentViewPage,
+        m_data.isMuted
+    };
+    m_lcd.update(renderData);
 }
 
 void AppController::updateTelemetry()

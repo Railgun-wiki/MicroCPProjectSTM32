@@ -62,6 +62,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/Src/Bmp280Bsp.cpp
     BSP/Src/PwmLedBsp.cpp
     BSP/Src/ButtonBsp.cpp
+    BSP/Src/LcdBsp.cpp
 )
 
 # Add include paths
