@@ -6,10 +6,12 @@
 #include "Bmp280Bsp.hpp"
 #include "PwmLedBsp.hpp"
 #include "ButtonBsp.hpp"
+#include "LcdBsp.hpp"
 #include "AppController.hpp"
 
-// 外部硬件定时器句柄声明，由 CubeMX 在 main.c / tim.c 中生成
+// 外部硬件定时器与 SPI 句柄声明，由 CubeMX 在 main.c / tim.c / spi.c 中生成
 extern TIM_HandleTypeDef htim3;
+extern SPI_HandleTypeDef hspi1;
 
 // ---- 静态局部对象持久化实例化 (避免动态堆分配) ----
 
@@ -27,8 +29,15 @@ static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1);
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0);
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1);
 
-// 5. 实例化应用核心业务控制器，采用构造函数依赖注入
-static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute);
+// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚参数化解耦绑定：CS=PB5, RS=PB9, RST=PB8, LED=PB10)
+static Bsp::LcdBsp     g_Lcd(&hspi1,
+                             GPIOB, GPIO_PIN_5,  // CS
+                             GPIOB, GPIO_PIN_9,  // RS/DC (避开冲突的 PB7)
+                             GPIOB, GPIO_PIN_8,  // RST
+                             GPIOB, GPIO_PIN_10); // LED (避开冲突的 PB6)
+
+// 6. 实例化应用核心业务控制器，采用构造函数依赖注入
+static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute, g_Lcd);
 
 // ---- C 语言接口包装实现 ----
 
