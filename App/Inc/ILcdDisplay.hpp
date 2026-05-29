@@ -33,15 +33,18 @@ public:
         float humidity;           ///< 实时环境湿度
         float pressure;           ///< 实时大气压强
         float altitude;           ///< 测算海拔高度
-        
+
         float tempHighLimit;      ///< 温度报警上限值
         float tempLowLimit;       ///< 温度报警下限值
         float pressHighLimit;     ///< 气压报警上限值
         float pressLowLimit;      ///< 气压报警下限值
-        
+
         Sys::AlarmState alarmState; ///< 系统当前的报警状态
         uint8_t currentViewPage;  ///< 当前活动的分页页码 (0 或 1)
         bool isMuted;             ///< 警报是否已静音
+
+        bool tempHumConnected;    ///< 温湿度传感器是否已连接
+        bool pressureConnected;   ///< 气压传感器是否已连接
     };
 
     /**

@@ -58,6 +58,8 @@ private:
     float m_lastAlt{-999.0f};
     Sys::AlarmState m_lastAlarmState{Sys::AlarmState::NORMAL};
     bool m_lastMute{false};
+    bool m_lastTempHumConn{true};
+    bool m_lastPressConn{true};
 
     // 常用调试画笔/背景色定义
     static constexpr uint16_t kColorBlack = 0x0000;

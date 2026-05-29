@@ -53,7 +53,11 @@ private:
     ILcdDisplay& m_lcd;
 
     TelemetryData m_data;
-    
+
+    // 传感器连接状态追踪
+    bool m_tempHumConnected{false};
+    bool m_pressureConnected{false};
+
     void updateTelemetry();
     void updateStateMachine();
     void handleInteractions();

@@ -25,15 +25,19 @@ void AppController::setup()
     
     // 自检温湿传感器
     if (m_th.init() == Sys::Status::OK) {
+        m_tempHumConnected = true;
         SYS_LOG("ITempHumSensor initialized successfully.");
     } else {
+        m_tempHumConnected = false;
         SYS_LOG("ITempHumSensor initialization failed!");
     }
-    
+
     // 自检气压传感器
     if (m_press.init() == Sys::Status::OK) {
+        m_pressureConnected = true;
         SYS_LOG("IPressureSensor initialized successfully.");
     } else {
+        m_pressureConnected = false;
         SYS_LOG("IPressureSensor initialization failed!");
     }
     
@@ -67,7 +71,9 @@ void AppController::run()
         m_data.pressLowLimit,
         m_data.alarmState,
         m_data.currentViewPage,
-        m_data.isMuted
+        m_data.isMuted,
+        m_tempHumConnected,
+        m_pressureConnected
     };
     m_lcd.update(renderData);
 }
@@ -78,7 +84,9 @@ void AppController::updateTelemetry()
     if (m_th.read(temp, hum) == Sys::Status::OK) {
         m_data.temperature = temp;
         m_data.humidity = hum;
+        m_tempHumConnected = true;
     } else {
+        m_tempHumConnected = false;
         SYS_LOG("Error: Failed to read temperature and humidity.");
     }
 
@@ -86,7 +94,9 @@ void AppController::updateTelemetry()
     if (m_press.read(press, alt) == Sys::Status::OK) {
         m_data.pressure = press;
         m_data.altitude = alt;
+        m_pressureConnected = true;
     } else {
+        m_pressureConnected = false;
         SYS_LOG("Error: Failed to read atmospheric pressure.");
     }
 }

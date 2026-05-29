@@ -2,7 +2,6 @@
 #include "LcdBsp.hpp"
 #include "LcdFont.hpp"
 #include <stdio.h>
-#include <string.h>
 
 namespace Bsp {
 
@@ -207,6 +206,8 @@ void LcdBsp::fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
     }
 
     while (SPIx->SR & SPI_SR_BSY);
+    (void)SPIx->DR; // clear RXNE to prevent OVR overrun
+    (void)SPIx->SR; // clear OVR flag
     csHigh();
 }
 
@@ -244,6 +245,8 @@ void LcdBsp::drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, 
     }
 
     while (SPIx->SR & SPI_SR_BSY);
+    (void)SPIx->DR; // clear RXNE to prevent OVR overrun
+    (void)SPIx->SR; // clear OVR flag
     csHigh();
 }
 
@@ -293,27 +296,44 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
 {
     char buf[40];
 
-    // --- 温度传感器数据调试行 ---
-    if (forceRedraw || data.temperature != m_lastTemp) {
-        sprintf(buf, "TEMP: %6.2f C  ", data.temperature);
-        drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
-        m_lastTemp = data.temperature;
+    // --- 温湿度传感器数据调试行 ---
+    bool connChanged = (data.tempHumConnected != m_lastTempHumConn);
+    if (forceRedraw || connChanged) {
+        if (!data.tempHumConnected) {
+            drawString(40, 75, "TEMP: Unconnected      ", kColorRed, kColorBlack, 16);
+            drawString(40, 100, "                        ", kColorBlack, kColorBlack, 16);
+            drawString(40, 140, "HUMI: Unconnected      ", kColorRed, kColorBlack, 16);
+            drawString(40, 165, "                        ", kColorBlack, kColorBlack, 16);
+        }
+        m_lastTempHumConn = data.tempHumConnected;
+        // 重置缓存，确保传感器重新连接后立即刷新数值
+        m_lastTemp = -999.0f;
+        m_lastHum = -999.0f;
     }
 
-    if (forceRedraw) {
-        sprintf(buf, "TEMP LIMIT: %4.1f ~ %4.1f C", data.tempLowLimit, data.tempHighLimit);
-        drawString(40, 100, buf, kColorGray, kColorBlack, 16);
-    }
+    if (data.tempHumConnected) {
+        // --- 温度 ---
+        if (forceRedraw || data.temperature != m_lastTemp) {
+            sprintf(buf, "TEMP: %6.2f C  ", data.temperature);
+            drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
+            m_lastTemp = data.temperature;
+        }
 
-    // --- 湿度传感器数据调试行 ---
-    if (forceRedraw || data.humidity != m_lastHum) {
-        sprintf(buf, "HUMI: %6.2f %%  ", data.humidity);
-        drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
-        m_lastHum = data.humidity;
-    }
+        if (forceRedraw) {
+            sprintf(buf, "TEMP LIMIT: %4.1f ~ %4.1f C", data.tempLowLimit, data.tempHighLimit);
+            drawString(40, 100, buf, kColorGray, kColorBlack, 16);
+        }
 
-    if (forceRedraw) {
-        drawString(40, 165, "HUMI LIMIT:  0.0 ~ 100.0 %", kColorGray, kColorBlack, 16);
+        // --- 湿度 ---
+        if (forceRedraw || data.humidity != m_lastHum) {
+            sprintf(buf, "HUMI: %6.2f %%  ", data.humidity);
+            drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
+            m_lastHum = data.humidity;
+        }
+
+        if (forceRedraw) {
+            drawString(40, 165, "HUMI LIMIT:  0.0 ~ 100.0 %", kColorGray, kColorBlack, 16);
+        }
     }
 }
 
@@ -321,27 +341,44 @@ void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool
 {
     char buf[40];
 
-    // --- 大气压强传感器数据调试行 ---
-    if (forceRedraw || data.pressure != m_lastPress) {
-        sprintf(buf, "PRES: %8.1f Pa  ", data.pressure);
-        drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
-        m_lastPress = data.pressure;
+    // --- 气压传感器数据调试行 ---
+    bool connChanged = (data.pressureConnected != m_lastPressConn);
+    if (forceRedraw || connChanged) {
+        if (!data.pressureConnected) {
+            drawString(40, 75, "PRES: Unconnected       ", kColorRed, kColorBlack, 16);
+            drawString(40, 100, "                        ", kColorBlack, kColorBlack, 16);
+            drawString(40, 140, "ALTI: Unconnected       ", kColorRed, kColorBlack, 16);
+            drawString(40, 165, "                        ", kColorBlack, kColorBlack, 16);
+        }
+        m_lastPressConn = data.pressureConnected;
+        // 重置缓存，确保传感器重新连接后立即刷新数值
+        m_lastPress = -999.0f;
+        m_lastAlt = -999.0f;
     }
 
-    if (forceRedraw) {
-        sprintf(buf, "PRES LIMIT: %6.0f ~ %6.0f Pa", data.pressLowLimit, data.pressHighLimit);
-        drawString(40, 100, buf, kColorGray, kColorBlack, 16);
-    }
+    if (data.pressureConnected) {
+        // --- 大气压强 ---
+        if (forceRedraw || data.pressure != m_lastPress) {
+            sprintf(buf, "PRES: %8.1f Pa  ", data.pressure);
+            drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
+            m_lastPress = data.pressure;
+        }
 
-    // --- 海拔数据调试行 ---
-    if (forceRedraw || data.altitude != m_lastAlt) {
-        sprintf(buf, "ALTI: %8.2f m   ", data.altitude);
-        drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
-        m_lastAlt = data.altitude;
-    }
+        if (forceRedraw) {
+            sprintf(buf, "PRES LIMIT: %6.0f ~ %6.0f Pa", data.pressLowLimit, data.pressHighLimit);
+            drawString(40, 100, buf, kColorGray, kColorBlack, 16);
+        }
 
-    if (forceRedraw) {
-        drawString(40, 165, "ALTI CALC: Barometric Formula", kColorGray, kColorBlack, 16);
+        // --- 海拔 ---
+        if (forceRedraw || data.altitude != m_lastAlt) {
+            sprintf(buf, "ALTI: %8.2f m   ", data.altitude);
+            drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
+            m_lastAlt = data.altitude;
+        }
+
+        if (forceRedraw) {
+            drawString(40, 165, "ALTI CALC: Barometric Formula", kColorGray, kColorBlack, 16);
+        }
     }
 }
 

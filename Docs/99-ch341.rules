@@ -1,0 +1,2 @@
+# CH341 USB-to-Serial adapter
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", OWNER="yuki", MODE="0600"
