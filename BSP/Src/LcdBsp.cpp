@@ -124,6 +124,13 @@ void LcdBsp::init()
     // 5. 亮屏并清屏
     ledOn();
     clear(kColorBlack);
+
+    // 调试：确认 init 完成并检查 LED 引脚电平
+    printf("[LCD] init done. PB6=%d PB7=%d PB8=%d PB9=%d\r\n",
+           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6),
+           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7),
+           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8),
+           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9));
 }
 
 void LcdBsp::reset()

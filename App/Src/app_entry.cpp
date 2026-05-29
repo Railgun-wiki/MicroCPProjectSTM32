@@ -15,26 +15,26 @@ extern SPI_HandleTypeDef hspi1;
 
 // ---- 静态局部对象持久化实例化 (避免动态堆分配) ----
 
-// 1. 复用模拟 I2C 总线，绑定 PB6=SCL, PB7=SDA
-static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_6, GPIOB, GPIO_PIN_7);
+// 1. 软件 I2C 总线，绑定 PB10=SCL, PB11=SDA (CubeMX I2C2 引脚)
+static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
 
 // 2. 挂载传感器，挂在同个 I2C 总线上
 static Bsp::Aht20Bsp   g_Aht20(g_I2cBus);
 static Bsp::Bmp280Bsp  g_Bmp280(g_I2cBus);
 
-// 3. 挂载 PWM 呼吸指示灯，绑定 TIM3 通道 1 (即 PA6)
+// 3. 挂载 PWM 呼吸指示灯，绑定 TIM3 通道 1 (CubeMX partial remap 后为 PB4)
 static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1);
 
 // 4. 挂载交互按键：KEY1 (PA0) 翻页，KEY2 (PA1) 静音
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0);
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1);
 
-// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚参数化解耦绑定：CS=PB5, RS=PB9, RST=PB8, LED=PB10)
+// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚与 FPGA 透传对齐：CS=PB9, RS=PB7, RST=PB8, LED=PB6)
 static Bsp::LcdBsp     g_Lcd(&hspi1,
-                             GPIOB, GPIO_PIN_5,  // CS
-                             GPIOB, GPIO_PIN_9,  // RS/DC (避开冲突的 PB7)
+                             GPIOB, GPIO_PIN_9,  // CS
+                             GPIOB, GPIO_PIN_7,  // RS/DC
                              GPIOB, GPIO_PIN_8,  // RST
-                             GPIOB, GPIO_PIN_10); // LED (避开冲突的 PB6)
+                             GPIOB, GPIO_PIN_6); // LED
 
 // 6. 实例化应用核心业务控制器，采用构造函数依赖注入
 static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute, g_Lcd);
