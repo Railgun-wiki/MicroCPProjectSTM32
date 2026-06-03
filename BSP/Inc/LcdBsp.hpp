@@ -5,6 +5,9 @@
 
 namespace Bsp {
 
+// 前置声明
+class GuiEngine;
+
 /**
  * @brief 基于 ST7796S 驱动芯片的 4寸 SPI TFT LCD BSP 驱动实现类
  * 
@@ -33,7 +36,23 @@ public:
 
     void init() override;
     void clear(uint16_t color) override;
+    void drawPixel(uint16_t x, uint16_t y, uint16_t color) override;
+    void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) override;
+    uint16_t getWidth() const override { return m_width; }
+    uint16_t getHeight() const override { return m_height; }
     void update(const App::ILcdDisplay::RenderData& data) override;
+
+    // 文本渲染（需要 SPI 寄存器级批量写入优化，保留在硬件层）
+    void drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size);
+    void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
+    void drawFloat(uint16_t x, uint16_t y, float value, uint8_t intDigits,
+                   uint8_t fracDigits, uint16_t fc, uint16_t bc, uint8_t size);
+
+    // 访问内部几何绘图引擎
+    GuiEngine& gui() { return *m_gui; }
+
+    // 注入 GuiEngine（由 app_entry.cpp 在构造后调用）
+    void setGui(GuiEngine* gui) { m_gui = gui; }
 
 private:
     SPI_HandleTypeDef* m_hspi;
@@ -61,6 +80,9 @@ private:
     bool m_lastTempHumConn{true};
     bool m_lastPressConn{true};
 
+    // 几何绘图引擎（纯算法，不含 HAL 依赖）
+    GuiEngine* m_gui{nullptr};
+
     // 常用调试画笔/背景色定义
     static constexpr uint16_t kColorBlack = 0x0000;
     static constexpr uint16_t kColorWhite = 0xFFFF;
@@ -86,11 +108,6 @@ private:
     void writeData16(uint16_t data);
     void setAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
     void reset();
-
-    // 基础文本/块绘制方法
-    void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);
-    void drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size);
-    void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
 
     // 局部渲染方法 (调试专用)
     void renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool forceRedraw);

@@ -26,6 +26,26 @@ public:
     virtual void clear(uint16_t color) = 0;
 
     /**
+     * @brief 绘制单个像素
+     */
+    virtual void drawPixel(uint16_t x, uint16_t y, uint16_t color) = 0;
+
+    /**
+     * @brief 填充矩形区域
+     */
+    virtual void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) = 0;
+
+    /**
+     * @brief 获取 LCD 宽度
+     */
+    virtual uint16_t getWidth() const = 0;
+
+    /**
+     * @brief 获取 LCD 高度
+     */
+    virtual uint16_t getHeight() const = 0;
+
+    /**
      * @brief LCD 渲染的解耦遥测数据包
      */
     struct RenderData {

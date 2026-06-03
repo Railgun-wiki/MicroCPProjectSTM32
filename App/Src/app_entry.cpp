@@ -7,6 +7,8 @@
 #include "PwmLedBsp.hpp"
 #include "ButtonBsp.hpp"
 #include "LcdBsp.hpp"
+#include "GuiEngine.hpp"
+#include "TouchBsp.hpp"
 #include "AppController.hpp"
 
 // 外部硬件定时器与 SPI 句柄声明，由 CubeMX 在 main.c / tim.c / spi.c 中生成
@@ -29,15 +31,25 @@ static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1);
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0);
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1);
 
-// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚与 FPGA 透传对齐：CS=PB9, RS=PB7, RST=PB8, LED=PB6)
+// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚与 FPGA 透传对齐：CS=PB5, DC=PB7, RST=PB8, LED=PB10)
 static Bsp::LcdBsp     g_Lcd(&hspi1,
-                             GPIOB, GPIO_PIN_9,  // CS
+                             GPIOB, GPIO_PIN_5,  // CS  → FPGA Y21 → LCD N19
                              GPIOB, GPIO_PIN_7,  // RS/DC
                              GPIOB, GPIO_PIN_8,  // RST
-                             GPIOB, GPIO_PIN_6); // LED
+                             GPIOB, GPIO_PIN_10); // LED → FPGA AB19 → LCD P22
 
 // 6. 实例化应用核心业务控制器，采用构造函数依赖注入
-static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute, g_Lcd);
+static Bsp::TouchBsp  g_Touch(GPIOA, GPIO_PIN_8,   // TCLK
+	                              GPIOB, GPIO_PIN_1,   // TCS
+	                              GPIOB, GPIO_PIN_0,   // TDIN
+	                              GPIOB, GPIO_PIN_12,  // TDOUT
+	                              GPIOA, GPIO_PIN_4);  // PENIRQ
+
+	// 7. GuiEngine (pure geometry on ILcdDisplay)
+	static Bsp::GuiEngine g_Gui(g_Lcd);
+
+	// 8. AppController with touch injection
+	static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute, g_Lcd, g_Touch);
 
 // ---- C 语言接口包装实现 ----
 
@@ -47,7 +59,13 @@ void App_Init(void)
     
     // 初始化 I2C 物理引脚和总线模式
     g_I2cBus.init();
-    
+
+    // 注入 GuiEngine 到 LcdBsp
+    g_Lcd.setGui(&g_Gui);
+
+    // 初始化触摸屏
+    g_Touch.init();
+
     // 初始化主状态机与各传感器驱动
     g_App.setup();
     

@@ -1,6 +1,7 @@
 // BSP/Src/LcdBsp.cpp
 #include "LcdBsp.hpp"
 #include "LcdFont.hpp"
+#include "GuiEngine.hpp"
 #include <stdio.h>
 
 namespace Bsp {
@@ -53,8 +54,19 @@ void LcdBsp::init()
     GPIO_InitStruct.Pin = m_ledPin;
     HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
 
-    // 3. 执行硬件复位
+    // 3. 等待 FPGA 就绪，再执行硬件复位
+    HAL_Delay(500);
     reset();
+
+    // 调试：测试 GPIO 引脚切换
+    csLow(); rsLow();
+    printf("[LCD] After csLow/rsLow: CS=%d DC=%d\r\n",
+           HAL_GPIO_ReadPin(m_csPort, m_csPin),
+           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
+    csHigh(); rsHigh();
+    printf("[LCD] After csHigh/rsHigh: CS=%d DC=%d\r\n",
+           HAL_GPIO_ReadPin(m_csPort, m_csPin),
+           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
 
     // 4. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
     writeCmd(0xF0); writeData(0xC3);
@@ -123,14 +135,15 @@ void LcdBsp::init()
 
     // 5. 亮屏并清屏
     ledOn();
-    clear(kColorBlack);
 
-    // 调试：确认 init 完成并检查 LED 引脚电平
-    printf("[LCD] init done. PB6=%d PB7=%d PB8=%d PB9=%d\r\n",
-           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6),
-           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7),
-           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8),
-           HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9));
+    // 调试：填充红色测试 GRAM 写入
+    printf("[LCD] Before fill: CR1=0x%04lX SR=0x%02lX\r\n",
+           (unsigned long)m_hspi->Instance->CR1,
+           (unsigned long)m_hspi->Instance->SR);
+    fillRect(0, 0, 479, 319, 0xF800); // 红色
+    printf("[LCD] After fill: CR1=0x%04lX SR=0x%02lX\r\n",
+           (unsigned long)m_hspi->Instance->CR1,
+           (unsigned long)m_hspi->Instance->SR);
 }
 
 void LcdBsp::reset()
@@ -141,11 +154,20 @@ void LcdBsp::reset()
     HAL_Delay(50);
 }
 
+// SPI 单字节发送（与参考工程 SPI_WriteByte 一致）
+static inline void spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
+{
+    while (!(SPIx->SR & SPI_SR_TXE));
+    SPIx->DR = data;
+    while (!(SPIx->SR & SPI_SR_RXNE));
+    (void)SPIx->DR;
+}
+
 void LcdBsp::writeCmd(uint8_t cmd)
 {
     csLow();
     rsLow();
-    HAL_SPI_Transmit(m_hspi, &cmd, 1, 100);
+    spiWriteByte(m_hspi->Instance, cmd);
     csHigh();
 }
 
@@ -153,7 +175,7 @@ void LcdBsp::writeData(uint8_t data)
 {
     csLow();
     rsHigh();
-    HAL_SPI_Transmit(m_hspi, &data, 1, 100);
+    spiWriteByte(m_hspi->Instance, data);
     csHigh();
 }
 
@@ -161,8 +183,8 @@ void LcdBsp::writeData16(uint16_t data)
 {
     csLow();
     rsHigh();
-    uint8_t buf[2] = {static_cast<uint8_t>(data >> 8), static_cast<uint8_t>(data & 0xFF)};
-    HAL_SPI_Transmit(m_hspi, buf, 2, 100);
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data >> 8));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data & 0xFF));
     csHigh();
 }
 
@@ -186,6 +208,17 @@ void LcdBsp::setAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1
 void LcdBsp::clear(uint16_t color)
 {
     fillRect(0, 0, m_width - 1, m_height - 1, color);
+}
+
+void LcdBsp::drawPixel(uint16_t x, uint16_t y, uint16_t color)
+{
+    if (x >= m_width || y >= m_height) return;
+    setAddressWindow(x, y, x, y);
+    csLow();
+    rsHigh();
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color >> 8));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color & 0xFF));
+    csHigh();
 }
 
 void LcdBsp::fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
@@ -216,6 +249,13 @@ void LcdBsp::fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
     (void)SPIx->DR; // clear RXNE to prevent OVR overrun
     (void)SPIx->SR; // clear OVR flag
     csHigh();
+    // 恢复全屏窗口，与参考工程一致
+    writeCmd(0x2A);
+    writeData(0); writeData(0);
+    writeData((m_width - 1) >> 8); writeData((m_width - 1) & 0xFF);
+    writeCmd(0x2B);
+    writeData(0); writeData(0);
+    writeData((m_height - 1) >> 8); writeData((m_height - 1) & 0xFF);
 }
 
 void LcdBsp::drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size)
@@ -273,6 +313,16 @@ void LcdBsp::drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, ui
     }
 }
 
+void LcdBsp::drawFloat(uint16_t x, uint16_t y, float value,
+                       uint8_t intDigits, uint8_t fracDigits,
+                       uint16_t fc, uint16_t bc, uint8_t size)
+{
+    char buf[20];
+    uint8_t totalWidth = intDigits + fracDigits + (fracDigits > 0 ? 1 : 0);
+    snprintf(buf, sizeof(buf), "%*.*f", totalWidth, fracDigits, static_cast<double>(value));
+    drawString(x, y, buf, fc, bc, size);
+}
+
 void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
 {
     // 如果页面发生改变，或者初次渲染，进行全屏擦除并强制全局重绘
@@ -282,9 +332,9 @@ void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
         m_lastPage = data.currentViewPage;
     }
 
-    // 1. 渲染头部栏 (固定显示调试标题)
+    // 1. 渲染头部栏
     if (forceRedraw) {
-        drawString(20, 15, "=== STM32 TELEMETRY DEBUGGER ===", kColorYellow, kColorBlack, 16);
+        drawString(20, 15, "Hello World!", kColorYellow, kColorBlack, 16);
         drawString(20, 35, "--------------------------------", kColorGray, kColorBlack, 16);
     }
 

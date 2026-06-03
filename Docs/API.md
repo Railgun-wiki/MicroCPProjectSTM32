@@ -35,9 +35,25 @@ classDiagram
             +isPressed() bool*
             +scanTick() void*
         }
+        class ILcdDisplay {
+            <<Interface>>
+            +init() void*
+            +clear(color: uint16_t) void*
+            +drawPixel(x,y,color) void*
+            +fillRect(x0,y0,x1,y1,color) void*
+            +getWidth() uint16_t*
+            +getHeight() uint16_t*
+            +update(data) void*
+        }
+        class ITouch {
+            <<Interface>>
+            +init() bool*
+            +isTouched() bool*
+            +readPosition(point) bool*
+        }
         class AppController {
             -TelemetryData m_data
-            +AppController(th, press, led, keyPage, keyMute)
+            +AppController(th, press, led, keyPage, keyMute, lcd, touch)
             +setup() void
             +run() void
             +getTelemetry() TelemetryData&
@@ -77,6 +93,34 @@ classDiagram
             +isPressed() bool
             +scanTick() void
         }
+        class LcdBsp {
+            +LcdBsp(hspi, csPort, csPin, rsPort, rsPin, rstPort, rstPin, ledPort, ledPin)
+            +init() void
+            +clear(color) void
+            +drawPixel(x,y,color) void
+            +fillRect(x0,y0,x1,y1,color) void
+            +getWidth() uint16_t
+            +getHeight() uint16_t
+            +drawChar(x,y,c,fc,bc,size) void
+            +drawString(x,y,str,fc,bc,size) void
+            +drawFloat(x,y,val,id,fd,fc,bc,sz) void
+            +setGui(gui) void
+            +gui() GuiEngine&
+        }
+        class GuiEngine {
+            +GuiEngine(lcd)
+            +drawLine(x0,y0,x1,y1,color) void
+            +drawCircle(xc,yc,r,color,fill) void
+            +drawRectBorder(x0,y0,x1,y1,color) void
+            +drawTriangle(x0,y0,x1,y1,x2,y2,color,fill) void
+        }
+        class TouchBsp {
+            +TouchBsp(clkPort, clkPin, csPort, csPin, dinPort, dinPin, outPort, outPin, irqPort, irqPin)
+            +init() bool
+            +isTouched() bool
+            +readPosition(point) bool
+            +setCalibration(xMin,xMax,yMin,yMax) void
+        }
     }
 
     %% 接口继承关系
@@ -84,15 +128,21 @@ classDiagram
     IPressureSensor <|.. Bmp280Bsp : 实现
     IIndicator <|.. PwmLedBsp : 实现
     IButton <|.. ButtonBsp : 实现
+    ILcdDisplay <|.. LcdBsp : 实现
+    ITouch <|.. TouchBsp : 实现
 
     %% 关联与注入关系
     AppController --> ITempHumSensor : 依赖
     AppController --> IPressureSensor : 依赖
     AppController --> IIndicator : 依赖
     AppController --> IButton : 依赖双按键
+    AppController --> ILcdDisplay : 依赖
+    AppController --> ITouch : 依赖
 
     Aht20Bsp --> SoftI2cBsp : 共享总线
     Bmp280Bsp --> SoftI2cBsp : 共享总线
+    LcdBsp --> GuiEngine : 组合
+    GuiEngine --> ILcdDisplay : 依赖
 ```
 
 ---
@@ -201,6 +251,56 @@ enum class AlarmState : uint8_t {
     *   `virtual void scanTick() = 0;`
         *   **功能**：物理信号电平扫描和消抖计数器更新。必须在定时器 10ms 中断内周期执行。
 
+### 3.5 LCD 显示接口 `ILcdDisplay`
+*   **头文件**：`App/Inc/ILcdDisplay.hpp`
+*   **方法列表**：
+    *   `virtual void init() = 0;`
+        *   **功能**：初始化 LCD 硬件，执行 GPIO 配置、复位、寄存器序列和清屏。
+    *   `virtual void clear(uint16_t color) = 0;`
+        *   **功能**：全屏填充指定 16 位 RGB565 颜色。
+    *   `virtual void drawPixel(uint16_t x, uint16_t y, uint16_t color) = 0;`
+        *   **功能**：绘制单个像素。供 `GuiEngine` 几何图元调用。
+    *   `virtual void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) = 0;`
+        *   **功能**：填充矩形区域。内部保持 CS 低电平批量写入，填充完毕后恢复全屏地址窗口。
+    *   `virtual uint16_t getWidth() const = 0;`
+        *   **功能**：返回 LCD 逻辑宽度（横屏 480）。
+    *   `virtual uint16_t getHeight() const = 0;`
+        *   **功能**：返回 LCD 逻辑高度（横屏 320）。
+    *   `virtual void update(const RenderData& data) = 0;`
+        *   **功能**：接收遥测数据包执行页面渲染。内部持有变化缓存以支持局部刷新，仅重绘变化的数值。
+*   **数据包 `RenderData`**：
+    | 字段 | 类型 | 说明 |
+    | :--- | :--- | :--- |
+    | `temperature` | `float` | 实时温度 (℃) |
+    | `humidity` | `float` | 实时相对湿度 (%) |
+    | `pressure` | `float` | 实时大气压强 (Pa) |
+    | `altitude` | `float` | 推算海拔 (m) |
+    | `tempHighLimit` | `float` | 温度报警上限 |
+    | `tempLowLimit` | `float` | 温度报警下限 |
+    | `pressHighLimit` | `float` | 气压报警上限 |
+    | `pressLowLimit` | `float` | 气压报警下限 |
+    | `alarmState` | `Sys::AlarmState` | 系统报警状态 |
+    | `currentViewPage` | `uint8_t` | 当前分页 (0/1) |
+    | `isMuted` | `bool` | 警报已静音 |
+    | `tempHumConnected` | `bool` | AHT20 已连接 |
+    | `pressureConnected` | `bool` | BMP280 已连接 |
+
+### 3.6 触摸屏接口 `ITouch`
+*   **头文件**：`App/Inc/ITouch.hpp`
+*   **数据结构 `TouchPoint`**：
+    | 字段 | 类型 | 说明 |
+    | :--- | :--- | :--- |
+    | `x` | `uint16_t` | 触摸点 X 坐标（校准后为像素坐标） |
+    | `y` | `uint16_t` | 触摸点 Y 坐标 |
+    | `valid` | `bool` | 坐标是否有效（手指松开时为 false） |
+*   **方法列表**：
+    *   `virtual bool init() = 0;`
+        *   **功能**：初始化触摸控制器 GPIO 引脚方向与电平。
+    *   `virtual bool isTouched() = 0;`
+        *   **功能**：读取 PENIRQ 引脚，返回当前是否被按下。
+    *   `virtual bool readPosition(TouchPoint& point) = 0;`
+        *   **功能**：读取滤波后的坐标。若未触摸，则 `point.valid = false`。
+
 ---
 
 ## 🧠 4. 应用核心控制器 `AppController`
@@ -211,9 +311,9 @@ enum class AlarmState : uint8_t {
 
 ### 4.1 构造函数
 ```cpp
-AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute);
+AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd, ITouch& touch);
 ```
-*   **依赖注入**：在系统启动实例化时引入所有被解耦的虚接口引用，彻底隔绝底层硬件平台。
+*   **依赖注入**：构造时引入所有解耦的虚接口引用。新增 `ITouch&` 和 `ILcdDisplay&`，彻底隔离底层硬件。
 
 ### 4.2 核心公共方法
 *   `void setup();`
@@ -311,6 +411,70 @@ struct TelemetryData {
     *   `void scanTick() override;` 必须在 10ms 中断内被轮询推进。
     *   只有检测到物理电平连续 2 次（即 20ms）均处于低电平时，才触发按下标志 `m_triggered = true`。
 
+### 5.6 LCD 显示驱动 `LcdBsp`
+*   **头文件**：`BSP/Inc/LcdBsp.hpp`
+*   **继承接口**：`App::ILcdDisplay`
+*   **构造函数**：
+    ```cpp
+    LcdBsp(SPI_HandleTypeDef* hspi,
+           GPIO_TypeDef* csPort, uint16_t csPin,
+           GPIO_TypeDef* rsPort, uint16_t rsPin,
+           GPIO_TypeDef* rstPort, uint16_t rstPin,
+           GPIO_TypeDef* ledPort, uint16_t ledPin);
+    ```
+    *   **引脚对齐**：当前 FPGA 透传映射为 CS=PB5, DC=PB7, RST=PB8, LED=PB10。SPI 使用 `hspi1`（PA5=SCK, PA7=MOSI）。
+*   **公共方法**：
+    *   `void init() override;` : 初始化 GPIO 控制引脚、硬件复位、ST7796S 寄存器序列、亮屏并全屏填充红色。
+    *   `void clear(uint16_t color) override;` : 全屏填充。
+    *   `void drawPixel(uint16_t x, uint16_t y, uint16_t color) override;` : 单像素绘制。
+    *   `void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) override;` : 矩形填充。CS 全程拉低，SPI 寄存器直写（不经过 HAL），填充完毕恢复全屏地址窗口。
+    *   `uint16_t getWidth() const override;` : 返回 480。
+    *   `uint16_t getHeight() const override;` : 返回 320。
+    *   `void drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size);` : 绘制 ASCII 字符（size 为 12 或 16）。
+    *   `void drawString(...);` : 绘制字符串，自动换行。
+    *   `void drawFloat(...);` : 格式化并绘制定点数。参数 `intDigits` / `fracDigits` 控制整数/小数位数。
+    *   `void setGui(GuiEngine* gui);` : 注入几何绘图引擎。
+    *   `GuiEngine& gui();` : 返回几何绘图引擎引用。
+*   **内部优化**：
+    *   SPI 发送使用直接寄存器操作（`SPI_SR_TXE` / `SPI_DR`），绕开 HAL 库的状态自检延时。
+    *   `fillRect` 末尾执行 `setAddressWindow(0,0,w-1,h-1)` 恢复全屏窗口，防止后续 `drawPixel` 窗口冲突。
+    *   文本渲染保留在硬件层（需 SPI 批量写入 + `LcdFont.hpp` 字模数据）。
+
+### 5.7 几何绘图引擎 `GuiEngine`
+*   **头文件**：`BSP/Inc/GuiEngine.hpp`
+*   **构造函数**：`GuiEngine(App::ILcdDisplay& lcd);`
+    *   只依赖于抽象接口，不含任何 `stm32f1xx_hal.h` 头文件。可独立于硬件进行单元测试。
+*   **方法列表**：
+    *   `void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);`
+        *   Bresenham 整数算法。通过 `drawPixel()` 逐像素绘制。
+    *   `void drawCircle(uint16_t xc, uint16_t yc, uint16_t r, uint16_t color, bool fill);`
+        *   中点画圆 + 8-way 对称。`fill=true` 时用水平 span `fillRect` 填充。
+    *   `void drawRectBorder(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);`
+        *   4 条单像素线组成矩形边框。
+    *   `void drawTriangle(uint16_t x0, ..., uint16_t y2, uint16_t color, bool fill);`
+        *   `fill=false` : 3 条 `drawLine`。`fill=true` : 按 Y 排序顶点，edge-scan 水平填充。
+    *   `uint16_t width() const;` / `uint16_t height() const;` : 透传 `ILcdDisplay` 尺寸。
+
+### 5.8 触摸屏驱动 `TouchBsp`
+*   **头文件**：`BSP/Inc/TouchBsp.hpp`
+*   **继承接口**：`App::ITouch`
+*   **构造函数**：
+    ```cpp
+    TouchBsp(GPIO_TypeDef* clkPort,  uint16_t clkPin,
+             GPIO_TypeDef* csPort,   uint16_t csPin,
+             GPIO_TypeDef* dinPort,  uint16_t dinPin,
+             GPIO_TypeDef* outPort,  uint16_t outPin,
+             GPIO_TypeDef* irqPort,  uint16_t irqPin);
+    ```
+    *   5 个 GPIO 引脚参数化注入。当前使用：TCLK=PA8, TCS=PB1, TDIN=PB0, TDOUT=PB12, PENIRQ=PA4。
+*   **通信方式**：GPIO bit-bang SPI（非硬件 SPI）。
+    *   XPT2046/ADS7846 使用 12-bit 模式，与 LCD 8-bit SPI 协议不同，避免与 `hspi1` 共享冲突。
+*   **公共方法**：
+    *   `bool init() override;` : GPIO 初始化（输出：TCLK/TCS/TDIN；输入上拉：TDOUT/PENIRQ）。自动禁用 JTAG 以释放 PB3/PB4。
+    *   `bool isTouched() override;` : 读取 PENIRQ 引脚。
+    *   `bool readPosition(TouchPoint& point) override;` : 5 次采样排序取中值（去最低最高）。校准后映射到屏幕像素坐标。
+    *   `void setCalibration(int16_t xMin, int16_t xMax, int16_t yMin, int16_t yMax);` : 设置 4 点校准参数。
+
 ---
 
 ## 🌉 6. C 语言系统桥接层 (`app_entry.h`)
@@ -345,24 +509,45 @@ void App_Timer_10ms_ISR(void);
 ```cpp
 // 1. 声明硬件外设（由 CubeMX 在 main.c 中生成）
 extern TIM_HandleTypeDef htim3;
+extern SPI_HandleTypeDef hspi1;
 
 // 2. 静态实例化软硬件总线与器件（规避动态内存分配碎片）
-static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_6, GPIOB, GPIO_PIN_7); // PB6=SCL, PB7=SDA
+static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11); // PB10=SCL, PB11=SDA
 
-static Bsp::Aht20Bsp   g_Aht20(g_I2cBus);   // AHT20 挂载于 I2C 总线
-static Bsp::Bmp280Bsp  g_Bmp280(g_I2cBus);  // BMP280 挂载于同一 I2C 总线
+static Bsp::Aht20Bsp   g_Aht20(g_I2cBus);
+static Bsp::Bmp280Bsp  g_Bmp280(g_I2cBus);
 
-static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1); // PA6 (TIM3_CH1) PWM
+static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1); // PB4 LED
 
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0); // PA0 翻页键
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1); // PA1 静音键
 
-// 3. 应用控制器构造，注入全部外设依赖
-static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator, g_KeyPage, g_KeyMute);
+// LCD 显示 (SPI1, 引脚对齐 FPGA 透传)
+static Bsp::LcdBsp     g_Lcd(&hspi1,
+                             GPIOB, GPIO_PIN_5,   // CS
+                             GPIOB, GPIO_PIN_7,   // DC
+                             GPIOB, GPIO_PIN_8,   // RST
+                             GPIOB, GPIO_PIN_10); // LED
+
+// 触摸屏 (XPT2046/ADS7846, GPIO bit-bang SPI)
+static Bsp::TouchBsp  g_Touch(GPIOA, GPIO_PIN_8,   // TCLK
+                              GPIOB, GPIO_PIN_1,   // TCS
+                              GPIOB, GPIO_PIN_0,   // TDIN
+                              GPIOB, GPIO_PIN_12,  // TDOUT
+                              GPIOA, GPIO_PIN_4);  // PENIRQ
+
+// 几何绘图引擎 (纯算法层, 仅依赖 ILcdDisplay 接口)
+static Bsp::GuiEngine g_Gui(g_Lcd);
+
+// 3. 应用控制器构造，注入全部外设依赖（含 LCD 和触摸屏）
+static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
+                                g_KeyPage, g_KeyMute, g_Lcd, g_Touch);
 
 // 4. 实现 C 桥接包装
 void App_Init(void) {
     g_I2cBus.init();
+    g_Lcd.setGui(&g_Gui);   // 注入几何引擎到 LCD 驱动
+    g_Touch.init();         // 初始化触摸屏
     g_App.setup();
 }
 
@@ -371,8 +556,8 @@ void App_Loop(void) {
 }
 
 void App_Timer_10ms_ISR(void) {
-    g_LedIndicator.updatePhysics(10); // 步进 10ms 动画
-    g_KeyPage.scanTick();             // 扫描 KEY1
-    g_KeyMute.scanTick();             // 扫描 KEY2
+    g_LedIndicator.updatePhysics(10);
+    g_KeyPage.scanTick();
+    g_KeyMute.scanTick();
 }
 ```

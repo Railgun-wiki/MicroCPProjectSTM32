@@ -3,13 +3,14 @@
 
 namespace App {
 
-AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd)
+AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd, ITouch& touch)
     : m_th(th)
     , m_press(press)
     , m_led(led)
     , m_keyPage(keyPage)
     , m_keyMute(keyMute)
     , m_lcd(lcd)
+    , m_touch(touch)
 {
 }
 
@@ -109,6 +110,17 @@ void AppController::handleInteractions()
         SYS_LOG("KEY1 pressed. Switched LCD to page %d", m_data.currentViewPage);
     }
     
+    // 触摸：右半屏切换页面
+    if (m_touch.isTouched()) {
+        App::TouchPoint pt;
+        if (m_touch.readPosition(pt) && pt.valid) {
+            if (pt.x > 240) {
+                m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
+                SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
+            }
+        }
+    }
+
     // KEY2 用于报警状态下的静音消音操作
     if (m_keyMute.isPressed()) {
         if (m_data.alarmState == Sys::AlarmState::WARNING_TEMP || 
