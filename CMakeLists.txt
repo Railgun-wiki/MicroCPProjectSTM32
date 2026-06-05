@@ -57,6 +57,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     App/Src/AppController.cpp
     App/Src/app_entry.cpp
+    App/Src/Lab16LcdDemo.cpp
     BSP/Src/SoftI2cBsp.cpp
     BSP/Src/Aht20Bsp.cpp
     BSP/Src/Bmp280Bsp.cpp
