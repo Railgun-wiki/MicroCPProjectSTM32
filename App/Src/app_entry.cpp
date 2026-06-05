@@ -25,8 +25,8 @@ static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
 static Bsp::Aht20Bsp   g_Aht20(g_I2cBus);
 static Bsp::Bmp280Bsp  g_Bmp280(g_I2cBus);
 
-// 3. 挂载 PWM 呼吸指示灯，绑定 TIM3 通道 1 (CubeMX partial remap 后为 PB4)
-static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1);
+// 3. 挂载 PWM 呼吸指示灯，绑定 TIM3 CH3 (PB0)
+static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_3);
 
 // 4. 挂载交互按键：KEY1 (PA0) 翻页，KEY2 (PA1) 静音
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0);
@@ -40,11 +40,11 @@ static Bsp::LcdBsp     g_Lcd(&hspi1,
                              LCD_LED_GPIO_Port, LCD_LED_Pin);
 
 // 6. 实例化应用核心业务控制器，采用构造函数依赖注入
-static Bsp::TouchBsp  g_Touch(GPIOA, GPIO_PIN_8,   // TCLK
-	                              GPIOB, GPIO_PIN_1,   // TCS
-	                              GPIOB, GPIO_PIN_0,   // TDIN
-	                              GPIOB, GPIO_PIN_12,  // TDOUT
-	                              GPIOA, GPIO_PIN_4);  // PENIRQ
+static Bsp::TouchBsp  g_Touch(TOUCH_TCLK_GPIO_Port, TOUCH_TCLK_Pin,
+                              TOUCH_TCS_GPIO_Port,  TOUCH_TCS_Pin,
+                              TOUCH_TDIN_GPIO_Port, TOUCH_TDIN_Pin,
+                              TOUCH_DOUT_GPIO_Port, TOUCH_DOUT_Pin,
+                              TOUCH_PEN_GPIO_Port,  TOUCH_PEN_Pin);
 
 	// 7. GuiEngine (pure geometry on ILcdDisplay)
 	static Bsp::GuiEngine g_Gui(g_Lcd);

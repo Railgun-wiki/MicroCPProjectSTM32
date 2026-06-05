@@ -6,6 +6,47 @@
 
 namespace Bsp {
 
+namespace {
+
+constexpr uint32_t kSpiFlagTimeout = 100000U;
+
+bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
+{
+    uint32_t timeout = kSpiFlagTimeout;
+    while ((SPIx->SR & flag) == 0U) {
+        if (--timeout == 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool waitForSpiFlagClear(SPI_TypeDef* SPIx, uint32_t flag)
+{
+    uint32_t timeout = kSpiFlagTimeout;
+    while ((SPIx->SR & flag) != 0U) {
+        if (--timeout == 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
+{
+    if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
+        return false;
+    }
+    SPIx->DR = data;
+    if (!waitForSpiFlagSet(SPIx, SPI_SR_RXNE)) {
+        return false;
+    }
+    (void)SPIx->DR;
+    return true;
+}
+
+} // namespace
+
 LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
                GPIO_TypeDef* csPort, uint16_t csPin,
                GPIO_TypeDef* rsPort, uint16_t rsPin,
@@ -57,6 +98,13 @@ void LcdBsp::init()
     // 3. 等待 LCD 上电稳定，再执行硬件复位
     HAL_Delay(500);
     reset();
+    ledOn();
+
+    if ((m_hspi->Instance->CR1 & SPI_CR1_SPE) == 0U) {
+        __HAL_SPI_ENABLE(m_hspi);
+    }
+    (void)m_hspi->Instance->DR;
+    (void)m_hspi->Instance->SR;
 
     // 4. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
     writeCmd(0xF0); writeData(0xC3);
@@ -122,9 +170,6 @@ void LcdBsp::init()
     writeCmd(0x11); // 退出睡眠模式
     HAL_Delay(120);
     writeCmd(0x29); // 开启显示屏
-
-    // 5. 亮屏
-    ledOn();
 }
 
 void LcdBsp::reset()
@@ -135,20 +180,11 @@ void LcdBsp::reset()
     HAL_Delay(50);
 }
 
-// SPI 单字节发送（与参考工程 SPI_WriteByte 一致）
-static inline void spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
-{
-    while (!(SPIx->SR & SPI_SR_TXE));
-    SPIx->DR = data;
-    while (!(SPIx->SR & SPI_SR_RXNE));
-    (void)SPIx->DR;
-}
-
 void LcdBsp::writeCmd(uint8_t cmd)
 {
     csLow();
     rsLow();
-    spiWriteByte(m_hspi->Instance, cmd);
+    (void)spiWriteByte(m_hspi->Instance, cmd);
     csHigh();
 }
 
@@ -156,7 +192,7 @@ void LcdBsp::writeData(uint8_t data)
 {
     csLow();
     rsHigh();
-    spiWriteByte(m_hspi->Instance, data);
+    (void)spiWriteByte(m_hspi->Instance, data);
     csHigh();
 }
 
@@ -164,8 +200,8 @@ void LcdBsp::writeData16(uint16_t data)
 {
     csLow();
     rsHigh();
-    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data >> 8));
-    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data & 0xFF));
+    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data >> 8));
+    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data & 0xFF));
     csHigh();
 }
 
@@ -197,8 +233,8 @@ void LcdBsp::drawPixel(uint16_t x, uint16_t y, uint16_t color)
     setAddressWindow(x, y, x, y);
     csLow();
     rsHigh();
-    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color >> 8));
-    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color & 0xFF));
+    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color >> 8));
+    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color & 0xFF));
     csHigh();
 }
 
@@ -220,13 +256,17 @@ void LcdBsp::fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
 
     // 高频极速寄存器直接写入，消除 HAL 库状态自检的循环延时
     for (uint32_t i = 0; i < numPixels; ++i) {
-        while (!(SPIx->SR & SPI_SR_TXE));
+        if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
+            break;
+        }
         SPIx->DR = high;
-        while (!(SPIx->SR & SPI_SR_TXE));
+        if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
+            break;
+        }
         SPIx->DR = low;
     }
 
-    while (SPIx->SR & SPI_SR_BSY);
+    (void)waitForSpiFlagClear(SPIx, SPI_SR_BSY);
     (void)SPIx->DR; // clear RXNE to prevent OVR overrun
     (void)SPIx->SR; // clear OVR flag
     csHigh();
