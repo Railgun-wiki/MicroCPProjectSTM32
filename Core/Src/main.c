@@ -56,9 +56,9 @@ TIM_HandleTypeDef htim3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_TIM3_Init(void);
-static void MX_I2C2_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_I2C2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -103,9 +103,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-  MX_TIM3_Init();
-  MX_I2C2_Init();
   MX_SPI1_Init();
+  MX_I2C2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   App_Init();
   /* USER CODE END 2 */
@@ -282,16 +282,12 @@ static void MX_TIM3_Init(void)
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN TIM3_Init 2 */
-  htim3.Init.Prescaler = 71;
-  htim3.Init.Period = 999;
-  HAL_TIM_PWM_Init(&htim3);
-  sConfigOC.Pulse = 0;
-  HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1);
+
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
 
@@ -337,6 +333,7 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -346,6 +343,35 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(TOUCH_TCLK_GPIO_Port, TOUCH_TCLK_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, TOUCH_TDIN_Pin|TOUCH_TCS_Pin|LCD_LED_Pin|LCD_DC_Pin
+                          |LCD_RST_Pin|LCD_CS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : TOUCH_PEN_Pin TOUCH_DOUT_Pin */
+  GPIO_InitStruct.Pin = TOUCH_PEN_Pin|TOUCH_DOUT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : TOUCH_TCLK_Pin */
+  GPIO_InitStruct.Pin = TOUCH_TCLK_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(TOUCH_TCLK_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : TOUCH_TDIN_Pin TOUCH_TCS_Pin LCD_LED_Pin LCD_DC_Pin
+                           LCD_RST_Pin LCD_CS_Pin */
+  GPIO_InitStruct.Pin = TOUCH_TDIN_Pin|TOUCH_TCS_Pin|LCD_LED_Pin|LCD_DC_Pin
+                          |LCD_RST_Pin|LCD_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

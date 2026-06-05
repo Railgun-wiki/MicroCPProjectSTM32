@@ -54,19 +54,9 @@ void LcdBsp::init()
     GPIO_InitStruct.Pin = m_ledPin;
     HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
 
-    // 3. 等待 FPGA 就绪，再执行硬件复位
+    // 3. 等待 LCD 上电稳定，再执行硬件复位
     HAL_Delay(500);
     reset();
-
-    // 调试：测试 GPIO 引脚切换
-    csLow(); rsLow();
-    printf("[LCD] After csLow/rsLow: CS=%d DC=%d\r\n",
-           HAL_GPIO_ReadPin(m_csPort, m_csPin),
-           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
-    csHigh(); rsHigh();
-    printf("[LCD] After csHigh/rsHigh: CS=%d DC=%d\r\n",
-           HAL_GPIO_ReadPin(m_csPort, m_csPin),
-           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
 
     // 4. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
     writeCmd(0xF0); writeData(0xC3);
@@ -133,17 +123,8 @@ void LcdBsp::init()
     HAL_Delay(120);
     writeCmd(0x29); // 开启显示屏
 
-    // 5. 亮屏并清屏
+    // 5. 亮屏
     ledOn();
-
-    // 调试：填充红色测试 GRAM 写入
-    printf("[LCD] Before fill: CR1=0x%04lX SR=0x%02lX\r\n",
-           (unsigned long)m_hspi->Instance->CR1,
-           (unsigned long)m_hspi->Instance->SR);
-    fillRect(0, 0, 479, 319, 0xF800); // 红色
-    printf("[LCD] After fill: CR1=0x%04lX SR=0x%02lX\r\n",
-           (unsigned long)m_hspi->Instance->CR1,
-           (unsigned long)m_hspi->Instance->SR);
 }
 
 void LcdBsp::reset()

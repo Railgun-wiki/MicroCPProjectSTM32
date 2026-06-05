@@ -422,7 +422,7 @@ struct TelemetryData {
            GPIO_TypeDef* rstPort, uint16_t rstPin,
            GPIO_TypeDef* ledPort, uint16_t ledPin);
     ```
-    *   **引脚对齐**：当前 FPGA 透传映射为 CS=PB5, DC=PB7, RST=PB8, LED=PB10。SPI 使用 `hspi1`（PA5=SCK, PA7=MOSI）。
+    *   **引脚对齐**：当前按 LAB16_SPI 例程接线：CS=PB9, DC=PB7, RST=PB8, LED=PB6。SPI 使用 `hspi1`（PA5=SCK, PA6=MISO, PA7=MOSI）。
 *   **公共方法**：
     *   `void init() override;` : 初始化 GPIO 控制引脚、硬件复位、ST7796S 寄存器序列、亮屏并全屏填充红色。
     *   `void clear(uint16_t color) override;` : 全屏填充。
@@ -522,12 +522,12 @@ static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1); // PB4 LED
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0); // PA0 翻页键
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1); // PA1 静音键
 
-// LCD 显示 (SPI1, 引脚对齐 FPGA 透传)
+// LCD 显示 (SPI1, 引脚对齐 LAB16_SPI 例程)
 static Bsp::LcdBsp     g_Lcd(&hspi1,
-                             GPIOB, GPIO_PIN_5,   // CS
+                             GPIOB, GPIO_PIN_9,   // CS
                              GPIOB, GPIO_PIN_7,   // DC
                              GPIOB, GPIO_PIN_8,   // RST
-                             GPIOB, GPIO_PIN_10); // LED
+                             GPIOB, GPIO_PIN_6);  // LED
 
 // 触摸屏 (XPT2046/ADS7846, GPIO bit-bang SPI)
 static Bsp::TouchBsp  g_Touch(GPIOA, GPIO_PIN_8,   // TCLK

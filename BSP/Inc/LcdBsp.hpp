@@ -20,13 +20,13 @@ public:
      * @brief 构造 LCD BSP 驱动对象
      * @param hspi SPI 外设 HAL 句柄指针 (如 &hspi1)
      * @param csPort CS 片选引脚所在的 GPIO 端口 (如 GPIOB)
-     * @param csPin CS 片选引脚编号 (如 GPIO_PIN_5)
+     * @param csPin CS 片选引脚编号 (参考工程为 GPIO_PIN_9)
      * @param rsPort RS 数据/命令选择引脚所在的 GPIO 端口 (如 GPIOB)
-     * @param rsPin RS 引脚编号 (如 GPIO_PIN_9)
+     * @param rsPin RS 引脚编号 (参考工程为 GPIO_PIN_7)
      * @param rstPort RST 复位引脚所在的 GPIO 端口 (如 GPIOB)
-     * @param rstPin RST 引脚编号 (如 GPIO_PIN_8)
+     * @param rstPin RST 引脚编号 (参考工程为 GPIO_PIN_8)
      * @param ledPort LED 背光引脚所在的 GPIO 端口 (如 GPIOB)
-     * @param ledPin LED 引脚编号 (如 GPIO_PIN_10)
+     * @param ledPin LED 引脚编号 (参考工程为 GPIO_PIN_6)
      */
     LcdBsp(SPI_HandleTypeDef* hspi,
            GPIO_TypeDef* csPort, uint16_t csPin,

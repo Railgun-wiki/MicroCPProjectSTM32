@@ -96,18 +96,19 @@ set_property PACKAGE_PIN M22  [get_ports SDI_BASE]
 
 ## STM32 侧引脚映射
 
-从 STM32 的角度看，LCD 控制信号对应的 GPIO 引脚如下：
+当前工程优先按 `LAB16_SPI` 例程直连 LCD 模块调试，不使用本节 FPGA 透传接线。生效的 LCD 接线如下：
 
-| STM32 引脚 | 功能 | FPGA ARM 侧引脚 |
-|------------|------|------------------|
-| PA5 | SPI1_SCK | W22 (SCK_ARM) |
-| PA7 | SPI1_MOSI | V19 (SDI_ARM) |
-| PB5 | LCD_CS | Y21 (CS_ARM) |
-| PB7 | LCD_DC/RS | AB20 (DC_ARM) |
-| PB8 | LCD_RST | Y18 (RST_ARM) |
-| PB10 | LCD_LED（背光） | AB19 (LED_ARM) |
+| STM32 引脚 | 功能 |
+|------------|------|
+| PA5 | SPI1_SCK |
+| PA6 | SPI1_MISO（可保留，LCD 不读取也可不接） |
+| PA7 | SPI1_MOSI |
+| PB9 | LCD_CS |
+| PB7 | LCD_DC/RS |
+| PB8 | LCD_RST |
+| PB6 | LCD_LED（背光） |
 
-注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB5/PB7/PB8/PB10）由 `LcdBsp::init()` 方法初始化。
+注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB9/PB7/PB8/PB6）由 `LcdBsp::init()` 方法初始化。
 
 ## SPI 配置
 
@@ -115,7 +116,7 @@ STM32 的 SPI1 配置参数：
 - 主模式，8 位数据宽度
 - CPOL = Low，CPHA = 1 Edge（SPI Mode 0）
 - 软件 NSS
-- 波特率分频：/4（72 MHz APB2 时钟下为 18 MHz）
+- 波特率分频：/2（72 MHz APB2 时钟下为 36 MHz）
 - MSB 先发送
 
-参考工程使用分频 /2（36 MHz）。如果 LCD 刷新速度偏慢，可在 `main.c` 的 `MX_SPI1_Init()` 中将分频改为 `SPI_BAUDRATEPRESCALER_2`。
+当前工程与参考例程一致，使用分频 /2（36 MHz）。

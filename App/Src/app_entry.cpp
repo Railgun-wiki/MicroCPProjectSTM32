@@ -1,5 +1,6 @@
 // App/Src/app_entry.cpp
 #include "app_entry.h"
+#include "main.h"
 #include "sys.hpp"
 #include "SoftI2cBsp.hpp"
 #include "Aht20Bsp.hpp"
@@ -31,12 +32,12 @@ static Bsp::PwmLedBsp  g_LedIndicator(&htim3, TIM_CHANNEL_1);
 static Bsp::ButtonBsp  g_KeyPage(GPIOA, GPIO_PIN_0);
 static Bsp::ButtonBsp  g_KeyMute(GPIOA, GPIO_PIN_1);
 
-// 5. 挂载 LCD 调试屏幕 (SPI1 接口，引脚与 FPGA 透传对齐：CS=PB5, DC=PB7, RST=PB8, LED=PB10)
+// 5. 挂载 LCD 调试屏幕 (SPI1 接口，参考工程接线：CS=PB9, DC=PB7, RST=PB8, LED=PB6)
 static Bsp::LcdBsp     g_Lcd(&hspi1,
-                             GPIOB, GPIO_PIN_5,  // CS  → FPGA Y21 → LCD N19
-                             GPIOB, GPIO_PIN_7,  // RS/DC
-                             GPIOB, GPIO_PIN_8,  // RST
-                             GPIOB, GPIO_PIN_10); // LED → FPGA AB19 → LCD P22
+                             LCD_CS_GPIO_Port,  LCD_CS_Pin,
+                             LCD_DC_GPIO_Port,  LCD_DC_Pin,
+                             LCD_RST_GPIO_Port, LCD_RST_Pin,
+                             LCD_LED_GPIO_Port, LCD_LED_Pin);
 
 // 6. 实例化应用核心业务控制器，采用构造函数依赖注入
 static Bsp::TouchBsp  g_Touch(GPIOA, GPIO_PIN_8,   // TCLK
