@@ -41,7 +41,9 @@ void App_Init(void)
     g_Lcd.init();
     g_Touch.init();
     g_Touch.setCalibration(200, 3900, 200, 3900);
+    SYS_LOG("demo init start");
     g_Demo.init();
+    SYS_LOG("demo init done");
 
     SYS_LOG("LAB16 LCD touch demo initialized.");
 }

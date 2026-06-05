@@ -93,8 +93,8 @@ private:
     static constexpr uint16_t kColorGray  = 0x8430;
 
     // 底层物理信号操作
-    inline void csLow() { HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_RESET); }
-    inline void csHigh() { HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET); }
+    void csLow();
+    void csHigh();
     inline void rsLow() { HAL_GPIO_WritePin(m_rsPort, m_rsPin, GPIO_PIN_RESET); }
     inline void rsHigh() { HAL_GPIO_WritePin(m_rsPort, m_rsPin, GPIO_PIN_SET); }
     inline void rstLow() { HAL_GPIO_WritePin(m_rstPort, m_rstPin, GPIO_PIN_RESET); }
