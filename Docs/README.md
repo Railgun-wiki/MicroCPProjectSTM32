@@ -111,3 +111,8 @@ cube-cmake --build PATH_TO_PROJECT/Debug --
 
 > [!IMPORTANT]
 > **架构边界原则**：对具体外设或引脚的修改仅限在板级支持包（BSP）层；应用层（App）逻辑修改禁止引入任何硬件相关的 API 或底层 HAL 库头文件。
+# 当前修订说明（2026-06）
+
+- 当前工程的真实传感器总线为 `I2C2`（`PB10/PB11`），默认实现为 `HardwareI2cBsp`，不再以 `SoftI2cBsp` 作为运行时默认路径。
+- `PA0/PA1` 已明确作为触摸输入 `TOUCH_PEN/TOUCH_DOUT` 使用，不再绑定物理 `ButtonBsp`。
+- 维护时请优先阅读 `Current_Integration_Status.md` 与 `CubeMX_BSP_Boundary.md` 中的最新边界说明，再参考本 README 的历史架构描述。

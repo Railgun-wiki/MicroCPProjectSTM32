@@ -1,29 +1,29 @@
-# CubeMX and BSP Boundary
+# CubeMX 与 BSP 边界
 
-This project keeps pin ownership in CubeMX generated code. BSP classes may drive pins and talk to devices, but they must not configure GPIO mode, pull, speed, alternate function, or peripheral clocks for pins already described in `MicroCPProjectSTM32.ioc`.
+本项目采用“CubeMX 管配置、BSP 管行为”的边界约定。BSP 可以驱动引脚、访问设备，但不能再次配置已经在 `MicroCPProjectSTM32.ioc` 中声明过的 GPIO 模式、上下拉、速度、复用功能和外设时钟。
 
-## CubeMX-owned configuration
+## 由 CubeMX 负责的配置
 
-- LCD SPI bus: `SPI1`, mode 0 (`CPOL_LOW`, `CPHA_1EDGE`), prescaler `/2`.
-- LCD control pins: `PB6 LCD_LED`, `PB7 LCD_DC`, `PB8 LCD_RST`, `PB9 LCD_CS` as push-pull outputs, high speed.
-- Touch bit-bang pins: `PA8 TOUCH_TCLK`, `PB3 TOUCH_TDIN`, `PB4 TOUCH_TCS` as push-pull outputs, high speed.
-- Touch inputs: `PA0 TOUCH_PEN`, `PA1 TOUCH_DOUT` as pull-up inputs.
-- `PA0/PA1` are touch-only in this project; do not bind `ButtonBsp` to them.
-- Sensor bus: `PB10/PB11` are `I2C2_SCL/I2C2_SDA`; do not reuse them as software I2C GPIO once the hardware I2C adapter is enabled.
-- Debug port: SWD-only. `PB3/PB4` are used by touch, so JTAG must be disabled while keeping `PA13/PA14` for SWD.
+- LCD SPI 总线：`SPI1`，mode 0（`CPOL_LOW`、`CPHA_1EDGE`），分频 `/2`
+- LCD 控制引脚：`PB6 LCD_LED`、`PB7 LCD_DC`、`PB8 LCD_RST`、`PB9 LCD_CS`，均为高速推挽输出
+- 触摸 bit-bang 引脚：`PA8 TOUCH_TCLK`、`PB3 TOUCH_TDIN`、`PB4 TOUCH_TCS`，均为高速推挽输出
+- 触摸输入引脚：`PA0 TOUCH_PEN`、`PA1 TOUCH_DOUT`，均为上拉输入
+- `PA0/PA1` 在本工程中为触摸专用，不再绑定 `ButtonBsp`
+- 传感器总线：`PB10/PB11` 为 `I2C2_SCL/I2C2_SDA`，启用硬件 I2C2 后不得再复用为软件 I2C GPIO
+- 调试口：保持 SWD-only。由于 `PB3/PB4` 被触摸占用，必须关闭 JTAG，仅保留 `PA13/PA14`
 
-## BSP-owned behavior
+## 由 BSP 负责的行为
 
-- `LcdBsp` owns ST7796S reset timing, command/data writes, address windows, and rendering primitives.
-- `TouchBsp` owns XPT2046/ADS7846 command timing, sampling, filtering, and calibration math.
-- BSP `init()` methods may put devices into idle/reset states, but must not call `HAL_GPIO_Init()` for CubeMX-owned pins.
+- `LcdBsp` 负责 ST7796S 的复位时序、命令/数据写入、地址窗口和绘制原语
+- `TouchBsp` 负责 XPT2046/ADS7846 的采样时序、滤波和校准计算
+- BSP 的 `init()` 可以让设备进入默认空闲态或复位态，但不能再对 CubeMX 已拥有的引脚调用 `HAL_GPIO_Init()`
 
-## Regeneration checklist
+## 重新生成代码后的核对清单
 
-After regenerating code from CubeMX, verify:
+重新生成 CubeMX 代码后，应确认：
 
-- `MX_GPIO_Init()` sets `TOUCH_PEN_Pin|TOUCH_DOUT_Pin` to `GPIO_PULLUP`.
-- `MX_GPIO_Init()` sets LCD/touch output pins to `GPIO_SPEED_FREQ_HIGH` with the expected initial levels.
-- `MX_SPI1_Init()` keeps `SPI_POLARITY_LOW`, `SPI_PHASE_1EDGE`, and `SPI_BAUDRATEPRESCALER_2`.
-- `MX_GPIO_Init()` or its user section keeps `__HAL_AFIO_REMAP_SWJ_NOJTAG()` so `PB3/PB4` are available to touch.
-- BSP files do not reconfigure GPIO pins already represented in the `.ioc`.
+- `MX_GPIO_Init()` 将 `TOUCH_PEN_Pin|TOUCH_DOUT_Pin` 配置为 `GPIO_PULLUP`
+- `MX_GPIO_Init()` 将 LCD/触摸输出引脚配置为 `GPIO_SPEED_FREQ_HIGH`，且默认电平正确
+- `MX_SPI1_Init()` 保持 `SPI_POLARITY_LOW`、`SPI_PHASE_1EDGE`、`SPI_BAUDRATEPRESCALER_2`
+- `MX_GPIO_Init()` 或其用户代码段仍保留 `__HAL_AFIO_REMAP_SWJ_NOJTAG()`，确保 `PB3/PB4` 可用于触摸
+- BSP 文件没有重新配置已经由 `.ioc` 描述的 GPIO

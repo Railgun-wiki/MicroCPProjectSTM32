@@ -561,3 +561,9 @@ void App_Timer_10ms_ISR(void) {
     g_KeyMute.scanTick();
 }
 ```
+# 当前修订说明（2026-06）
+
+- 当前默认总线实现为 `HardwareI2cBsp`，通过 `I2C2`（`PB10/PB11`）访问 AHT20 与 BMP280。
+- `SoftI2cBsp` 仍保留在代码树中，但属于备选实现，不再是 `app_entry.cpp` 的默认注入对象。
+- `Aht20Bsp` 与 `Bmp280Bsp` 当前依赖的是 `II2cBus` 抽象，而不是只接受 `SoftI2cBsp`。
+- `PA0/PA1` 为触摸专用输入，不再作为 `KEY1/KEY2` 物理按键接入。
