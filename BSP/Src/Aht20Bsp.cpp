@@ -3,7 +3,7 @@
 
 namespace Bsp {
 
-Aht20Bsp::Aht20Bsp(SoftI2cBsp& i2cBus)
+Aht20Bsp::Aht20Bsp(II2cBus& i2cBus)
     : m_i2c(i2cBus)
 {
 }

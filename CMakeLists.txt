@@ -58,6 +58,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/AppController.cpp
     App/Src/app_entry.cpp
     BSP/Src/SoftI2cBsp.cpp
+    BSP/Src/HardwareI2cBsp.cpp
     BSP/Src/Aht20Bsp.cpp
     BSP/Src/Bmp280Bsp.cpp
     BSP/Src/PwmLedBsp.cpp

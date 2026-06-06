@@ -1,13 +1,13 @@
 // BSP/Inc/Bmp280Bsp.hpp
 #pragma once
 #include "IPressureSensor.hpp"
-#include "SoftI2cBsp.hpp"
+#include "II2cBus.hpp"
 
 namespace Bsp {
 
 class Bmp280Bsp : public App::IPressureSensor {
 public:
-    Bmp280Bsp(SoftI2cBsp& i2cBus);
+    Bmp280Bsp(II2cBus& i2cBus);
     
     Sys::Status init() override;
     Sys::Status read(float& pressure, float& altitude) override;
@@ -29,7 +29,7 @@ private:
         int16_t  dig_P9;
     } m_calib;
 
-    SoftI2cBsp& m_i2c;
+    II2cBus& m_i2c;
     int32_t m_tFine{0}; // 气压计算必须依赖温度微调因子
     bool m_initialized{false};
 

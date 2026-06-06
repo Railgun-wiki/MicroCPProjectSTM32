@@ -1,20 +1,20 @@
 // BSP/Inc/SoftI2cBsp.hpp
 #pragma once
 #include "stm32f1xx_hal.h"
-#include "sys.hpp"
+#include "II2cBus.hpp"
 
 namespace Bsp {
 
-class SoftI2cBsp {
+class SoftI2cBsp : public II2cBus {
 public:
     SoftI2cBsp(GPIO_TypeDef* sclPort, uint16_t sclPin, GPIO_TypeDef* sdaPort, uint16_t sdaPin);
     
     void init();
     
-    Sys::Status writeRegs(uint8_t devAddr, uint8_t regAddr, const uint8_t* pData, uint16_t len);
-    Sys::Status readRegs(uint8_t devAddr, uint8_t regAddr, uint8_t* pData, uint16_t len);
-    Sys::Status directRead(uint8_t devAddr, uint8_t* pData, uint16_t len);
-    Sys::Status directWrite(uint8_t devAddr, const uint8_t* pData, uint16_t len);
+    Sys::Status writeRegs(uint8_t devAddr, uint8_t regAddr, const uint8_t* pData, uint16_t len) override;
+    Sys::Status readRegs(uint8_t devAddr, uint8_t regAddr, uint8_t* pData, uint16_t len) override;
+    Sys::Status directRead(uint8_t devAddr, uint8_t* pData, uint16_t len) override;
+    Sys::Status directWrite(uint8_t devAddr, const uint8_t* pData, uint16_t len) override;
 
 private:
     GPIO_TypeDef* m_sclPort;

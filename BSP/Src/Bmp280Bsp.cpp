@@ -4,7 +4,7 @@
 
 namespace Bsp {
 
-Bmp280Bsp::Bmp280Bsp(SoftI2cBsp& i2cBus)
+Bmp280Bsp::Bmp280Bsp(II2cBus& i2cBus)
     : m_i2c(i2cBus)
 {
 }

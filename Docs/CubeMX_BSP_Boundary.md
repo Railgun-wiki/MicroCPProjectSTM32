@@ -8,6 +8,7 @@ This project keeps pin ownership in CubeMX generated code. BSP classes may drive
 - LCD control pins: `PB6 LCD_LED`, `PB7 LCD_DC`, `PB8 LCD_RST`, `PB9 LCD_CS` as push-pull outputs, high speed.
 - Touch bit-bang pins: `PA8 TOUCH_TCLK`, `PB3 TOUCH_TDIN`, `PB4 TOUCH_TCS` as push-pull outputs, high speed.
 - Touch inputs: `PA0 TOUCH_PEN`, `PA1 TOUCH_DOUT` as pull-up inputs.
+- `PA0/PA1` are touch-only in this project; do not bind `ButtonBsp` to them.
 - Sensor bus: `PB10/PB11` are `I2C2_SCL/I2C2_SDA`; do not reuse them as software I2C GPIO once the hardware I2C adapter is enabled.
 - Debug port: SWD-only. `PB3/PB4` are used by touch, so JTAG must be disabled while keeping `PA13/PA14` for SWD.
 
