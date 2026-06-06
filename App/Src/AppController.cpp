@@ -105,12 +105,14 @@ void AppController::updateTelemetry()
 void AppController::handleInteractions()
 {
     // KEY1 用于切换 LCD 显示页 (0: 温湿屏, 1: 气压海拔屏)
+    // Optional logical page button input. In the current hardware mapping this is a null button.
     if (m_keyPage.isPressed()) {
         m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
-        SYS_LOG("KEY1 pressed. Switched LCD to page %d", m_data.currentViewPage);
+        SYS_LOG("Page button pressed. Switched LCD to page %d", m_data.currentViewPage);
     }
     
     // 触摸：右半屏切换页面
+    // Touch input: tapping on the right half of the screen flips the page.
     if (m_touch.isTouched()) {
         App::TouchPoint pt;
         if (m_touch.readPosition(pt) && pt.valid) {
@@ -122,16 +124,17 @@ void AppController::handleInteractions()
     }
 
     // KEY2 用于报警状态下的静音消音操作
+    // Optional logical mute button input. In the current hardware mapping this is a null button.
     if (m_keyMute.isPressed()) {
         if (m_data.alarmState == Sys::AlarmState::WARNING_TEMP || 
             m_data.alarmState == Sys::AlarmState::WARNING_PRES) {
             m_data.isMuted = true;
             m_data.alarmState = Sys::AlarmState::MUTED;
-            SYS_LOG("KEY2 pressed. Alarm is muted.");
+            SYS_LOG("Mute button pressed. Alarm is muted.");
         } else if (m_data.alarmState == Sys::AlarmState::MUTED) {
             m_data.isMuted = false;
             // 重新进入异常状态以重新判定
-            SYS_LOG("KEY2 pressed. Alarm unmuted.");
+            SYS_LOG("Mute button pressed. Alarm unmuted.");
         }
     }
 }
