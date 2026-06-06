@@ -66,36 +66,6 @@ LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
 
 void LcdBsp::init()
 {
-    // 1. 动态启用 GPIO 端口时钟
-    if (m_csPort == GPIOA || m_rsPort == GPIOA || m_rstPort == GPIOA || m_ledPort == GPIOA) {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-    }
-    if (m_csPort == GPIOB || m_rsPort == GPIOB || m_rstPort == GPIOB || m_ledPort == GPIOB) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-    }
-    if (m_csPort == GPIOC || m_rsPort == GPIOC || m_rstPort == GPIOC || m_ledPort == GPIOC) {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-    }
-
-    // 2. 初始化 GPIO 控制引脚为推挽输出模式
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-
-    GPIO_InitStruct.Pin = m_csPin;
-    HAL_GPIO_Init(m_csPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_rsPin;
-    HAL_GPIO_Init(m_rsPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_rstPin;
-    HAL_GPIO_Init(m_rstPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_ledPin;
-    HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
-
-    // 3. 等待 LCD 上电稳定，再执行硬件复位
     HAL_Delay(500);
     reset();
     ledOn();

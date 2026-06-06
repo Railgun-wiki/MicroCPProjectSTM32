@@ -27,51 +27,6 @@ TouchBsp::TouchBsp(GPIO_TypeDef* clkPort, uint16_t clkPin,
 
 bool TouchBsp::init()
 {
-    // 启用 GPIO 时钟
-    if (m_clkPort == GPIOA || m_irqPort == GPIOA || m_outPort == GPIOA) {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-    }
-    if (m_clkPort == GPIOB || m_csPort == GPIOB || m_dinPort == GPIOB ||
-        m_irqPort == GPIOB || m_outPort == GPIOB) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-    }
-    if (m_clkPort == GPIOC || m_csPort == GPIOC || m_dinPort == GPIOC ||
-        m_irqPort == GPIOC || m_outPort == GPIOC) {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-    }
-
-    // 禁用 JTAG 以释放 PB3/PB4 作为普通 IO（如果使用了这些引脚）
-    if (m_dinPin == GPIO_PIN_3 || m_csPin == GPIO_PIN_4) {
-        __HAL_RCC_AFIO_CLK_ENABLE();
-        __HAL_AFIO_REMAP_SWJ_NOJTAG();
-    }
-
-    // 输出引脚：TCLK, TCS, TDIN
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-
-    GPIO_InitStruct.Pin = m_clkPin;
-    HAL_GPIO_Init(m_clkPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_csPin;
-    HAL_GPIO_Init(m_csPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_dinPin;
-    HAL_GPIO_Init(m_dinPort, &GPIO_InitStruct);
-
-    // 输入引脚：TDOUT, PENIRQ
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-
-    GPIO_InitStruct.Pin = m_outPin;
-    HAL_GPIO_Init(m_outPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = m_irqPin;
-    HAL_GPIO_Init(m_irqPort, &GPIO_InitStruct);
-
-    // 初始状态
     csHigh();
     clkLow();
     dinLow();
