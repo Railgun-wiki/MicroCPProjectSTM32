@@ -27,3 +27,6 @@
 
 # Clangd
 .cache/
+
+# Local programmer logs
+ram
