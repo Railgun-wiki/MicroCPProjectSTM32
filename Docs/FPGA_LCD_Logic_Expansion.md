@@ -1,5 +1,10 @@
 # FPGA 逻辑扩展设计思路
 
+> 研究文档，非当前实现说明。
+>
+> 当前仓库中的 MCU 固件仍以 STM32 直接驱动 LCD 为主，FPGA 侧默认仅承担透传相关职责。
+> 若需确认当前已落地状态，请先查看 [Current_Integration_Status.md](./Current_Integration_Status.md) 和 [FPGA_LCD_Setup.md](./FPGA_LCD_Setup.md)。
+
 ## 当前架构（纯透传）
 
 ```

@@ -1,251 +1,158 @@
-# STM32 C++ 项目设计与开发规范 (MicroCPProjectSTM32)
+# MicroCPProjectSTM32 设计与开发规范
 
-> **导航中心**： [📚 文档主页](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/README.md) | [📐 设计与开发规范](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/Specification.md) | [🔌 API 接口与类参考手册](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/API.md)
+本文档描述工程的长期架构约束、目录职责、构建规范和协作规则。
 
-本项目致力于在 STM32F103 主控平台上，构建一套**高复用性、低耦合性、面向对象**的优质嵌入式系统固件。为了保证团队协作的高效性以及软件架构的优雅度，本规范确立了 C++ 开发标准、目录职责划分、系统宏定义管理以及基于虚函数的依赖注入解耦机制。
+注意：
 
----
+- 本文档是规范，不是当前接线说明
+- 当前实际硬件映射和运行路径以源码、`.ioc` 和 [Current_Integration_Status.md](./Current_Integration_Status.md) 为准
 
-## 🛠️ 一、 编译环境与 C++ 支持规范
+## 构建规范
 
-本项目基于 **CMake + GCC ARM Embedded** 链条进行构建，已全面支持现代化 C++ 编程标准。
+### 编译标准
 
-### 1.1 C++ 编译器配置
-*   **语言标准**：采用 **C++17**（`CMAKE_CXX_STANDARD 17`），允许使用折叠表达式、结构化绑定、`std::optional`、`constexpr if` 等高效特性。
-*   **嵌入式代码体积优化**：由于 STM32F103C8T6 只有 64KB Flash / 20KB RAM，为防止 C++ 特性导致固件急剧膨胀，开启以下编译参数：
-    *   `-fno-exceptions`：**禁用 C++ 异常处理**。异常处理会生成大量的 unwind 表，显著增加 Flash 开销。在嵌入式中，所有异常分支均应通过状态码（如 `enum class Result`）或 `std::optional` 传递。
-    *   `-fno-rtti`：**禁用运行时类型识别 (RTTI)**。禁止使用 `dynamic_cast` 和 `typeid`，以消除运行时类描述信息的开销。使用静态多态（模板）或纯虚接口来代替。
-    *   `-fno-use-cxa-atexit`：**禁用全局析构函数注册**。全局对象永远不会被销毁，这样可以节省析构链表的内存空间。
+- C 语言标准：`C11`
+- C++ 标准：`C++17`
+- 当前项目语言在 `CMakeLists.txt` 中统一配置
 
-### 1.2 内存管理规范
-*   **严禁运行时动态内存分配**：在 `while(1)` 业务循环中，严禁使用 `new` / `delete`、`malloc` / `free` 或包含隐式分配的 C++ 标准容器（如 `std::vector`），防止产生内存碎片导致系统运行数天后死机。
-*   **静态生命周期**：所有的对象实例化（包括 BSP 驱动层和 App 应用层）应当在**系统初始化阶段**以静态全局对象、单例模式或栈上对象的形式创建完毕，并在生命周期内常驻内存。
+### C++ 约束
 
----
+在 `GNU` 编译器路径下，当前工程启用了以下选项以降低固件体积：
 
-## 📂 二、 目录结构与模块职责划分
+- `-fno-exceptions`
+- `-fno-rtti`
+- `-fno-use-cxa-atexit`
 
-项目目录结构清晰解耦，每一个文件夹都扮演着明确的架构角色。
+规范要求：
 
+- 禁止依赖异常处理作为控制流
+- 禁止依赖 RTTI
+- 优先使用静态对象、栈对象和显式状态码
+
+### 推荐构建命令
+
+```bash
+cmake --preset Debug
+cmake --build --preset Debug
 ```
+
+发布构建：
+
+```bash
+cmake --preset Release
+cmake --build --preset Release
+```
+
+## 目录职责
+
+```text
 MicroCPProjectSTM32/
-├── App/                <-- 应用逻辑层 (纯 C++，完全平台无关)
-│   ├── Inc/
-│   └── Src/
-├── BSP/                <-- 板级支持包 (软硬件适配器，C++ 实现)
-│   ├── Inc/
-│   └── Src/
-├── Core/               <-- CubeMX 生成的核心代码 (C 语言，基本硬件初始化)
-│   ├── Inc/
-│   └── Src/
-├── SYSTEM/             <-- 系统级全局宏定义目录 (仅含唯一头文件 sys.hpp)
-│   └── sys.hpp
-├── Drivers/            <-- ST 官方提供的 HAL 库与 CMSIS 驱动 (C 语言)
-├── Docs/               <-- 系统设计、规范与 API 接口参考文档中心
-└── CMakeLists.txt      <-- 主构建文件
+├── App/        应用逻辑层，面向抽象接口编程
+├── BSP/        板级支持包，负责硬件适配
+├── Core/       CubeMX 生成的 MCU 初始化与中断骨架
+├── Drivers/    HAL 与 CMSIS
+├── SYSTEM/     系统级公共定义，仅保留 sys.hpp
+├── Docs/       项目文档与研究资料
+└── cmake/      工具链与 CubeMX 构建集成
 ```
 
-### 目录详细职责定义：
-1.  **`SYSTEM/`（系统配置）**：
-    *   **硬性约束**：**该文件夹有且仅能有一个头文件 `sys.hpp`。**
-    *   **作用**：统一管理整个系统的核心常数、时钟宏定义、调试控制开关、以及全局公共工具。
-2.  **`App/`（应用逻辑层）**：
-    *   **硬性约束**：**绝对不允许 `#include "stm32f1xx_hal.h"`** 或任何硬件寄存器头文件。该层代码必须是纯粹的 C++ 逻辑。
-    *   **作用**：定义整个系统的业务状态机、报警判定逻辑、温湿度与气压的交互逻辑。它通过**虚函数接口**来操纵硬件。
-3.  **`BSP/`（板级支持包）**：
-    *   **作用**：作为“适配器（Adapter）”，实现 `App/` 中定义的虚接口。这里可以包含 STM32 的 HAL 库头文件，编写软件 I2C 控制时序、PWM 寄存器操作以及具体的物理传感器通信协议。
-4.  **`Core/` 与 `Drivers/`（底层基座）**：
-    *   由 STM32CubeMX 工具维护，用于配置 MCU 时钟、底层引脚复用和串口中断等基座工作。
-5.  **`Docs/`（系统文档中心）**：
-    *   **作用**：集中管理整个项目的设计规范、接口文档、协作方案等，提供多页间的便捷导航与技术指南。
+### `App/`
 
----
+- 只依赖抽象接口，不直接依赖具体硬件寄存器操作
+- 不应在业务逻辑中混入 CubeMX 初始化代码
+- `AppController` 是当前核心业务状态机
 
-## 📐 三、 基于虚函数的“应用与驱动”解耦机制
+### `BSP/`
 
-为了解决嵌入式开发中“业务逻辑与底层驱动紧密耦合，一旦换传感器或改引脚就要重构整个项目”的痛点，本项目推行**控制反转 (IoC)** 与 **依赖倒置 (DIP)** 模式。
+- 负责把 `App/` 所需接口映射到底层 HAL 或 GPIO 行为
+- 可以包含 HAL 头文件
+- 所有具体硬件时序、寄存器访问、总线适配都应收敛到这一层
 
-### 3.1 架构设计模式
-*   **设计思路**：应用层 `App` 是“甲方”，它定义它需要什么样的数据（例如“我需要温度和湿度，我不在乎你是用 AHT20、SHT30 还是 DHT11 采集的”）。`App` 通过定义抽象类（纯虚函数接口）来表达需求。
-*   板级支持包 `BSP` 是“乙方”，负责落实这些需求，继承并实现这些虚接口。
-*   在系统初始化时，通过构造函数注入（Dependency Injection），将 `BSP` 实例作为指针或引用传递给 `App` 控制器。
+### `Core/`
+
+- 由 CubeMX 主导生成
+- 负责时钟、GPIO、DMA、中断向量、外设句柄初始化
+- 不承担业务逻辑
+
+### `SYSTEM/`
+
+- 只保留 `sys.hpp`
+- 放置全局宏、公共枚举、系统级轻量工具
+
+### `Docs/`
+
+- 当前实现说明与研究方案必须分开表达
+- 文档如与代码冲突，以代码和 `.ioc` 为最终事实源
+
+## 分层原则
+
+工程遵循依赖倒置与依赖注入：
+
+- `App` 定义能力需求，例如 `ITempHumSensor`、`IPressureSensor`、`ILcdDisplay`、`ITouch`
+- `BSP` 提供能力实现，例如 `Aht20Bsp`、`Bmp280Bsp`、`LcdBsp`、`TouchBsp`
+- `app_entry.cpp` 负责静态实例化并完成注入
+
+### 推荐依赖方向
 
 ```mermaid
-classDiagram
-    class ITempHumSensor {
-        <<Interface>>
-        +init() bool*
-        +read(temp: float&, hum: float&) bool*
-    }
-    class IPressureSensor {
-        <<Interface>>
-        +init() bool*
-        +read(press: float&, alt: float&) bool*
-    }
-    class IIndicator {
-        <<Interface>>
-        +setNormalBreathing() void*
-        +setWarningBlinking() void*
-    }
-    
-    class AppController {
-        -ITempHumSensor& thSensor
-        -IPressureSensor& pressSensor
-        -IIndicator& indicator
-        +run() void
-    }
-    
-    class Aht20Bsp {
-        +init() bool
-        +read(temp: float&, hum: float&) bool
-        -softI2cRead() void
-    }
-    class Bmp280Bsp {
-        +init() bool
-        +read(press: float&, alt: float&) bool
-        -compensateData() void
-    }
-    class PwmLedBsp {
-        +setNormalBreathing() void
-        +setWarningBlinking() void
-    }
-
-    ITempHumSensor <|.. Aht20Bsp : 继承与实现
-    IPressureSensor <|.. Bmp280Bsp : 继承与实现
-    IIndicator <|.. PwmLedBsp : 继承与实现
-    
-    AppController --> ITempHumSensor : 依赖抽象
-    AppController --> IPressureSensor : 依赖抽象
-    AppController --> IIndicator : 依赖抽象
+graph TD
+    App["App 层抽象与业务逻辑"] --> Interfaces["抽象接口"]
+    BSP["BSP 具体实现"] --> Interfaces
+    Entry["app_entry.cpp"] --> App
+    Entry --> BSP
+    Core["CubeMX Core"] --> Entry
 ```
 
-### 3.2 抽象接口定义规范 (在 App 中声明)
-在 `App` 目录下定义通用的抽象接口：
+约束：
 
-```cpp
-// App/Inc/ITempHumSensor.hpp
-#pragma once
+- `App` 可以依赖抽象接口和 `sys.hpp`
+- `App` 不应直接依赖 HAL 句柄类型
+- `BSP` 不应承担高层业务状态机
+- `Core` 不应塞入业务策略
 
-namespace App {
+## 接口与状态码规范
 
-class ITempHumSensor {
-public:
-    virtual ~ITempHumSensor() = default;
-    
-    // 初始化传感器，成功返回 true，失败返回 false
-    virtual bool init() = 0;
-    
-    // 读取温湿度物理值
-    virtual bool read(float& temperature, float& humidity) = 0;
-};
+- 抽象接口优先返回 `Sys::Status` 或显式布尔值，具体以接口头文件定义为准
+- 规范示例不能假设某个具体外设就是当前默认路径
+- 文档示例中出现的接口签名必须与当前头文件保持一致
 
-} // namespace App
-```
+特别说明：
 
-### 3.3 驱动层实现规范 (在 BSP 中实现)
-在 `BSP` 目录下继承并具体实现接口：
+- 当前工程里 `II2cBus` 是总线抽象，`HardwareI2cBsp` 是默认实现
+- `SoftI2cBsp` 是备选实现，不应在规范文档中被描述为当前默认链路
+- `IButton` 仍是业务抽象的一部分，但当前工程运行时注入的是 `NullButton`
 
-```cpp
-// BSP/Inc/Aht20Bsp.hpp
-#pragma once
-#include "ITempHumSensor.hpp"
-#include "sys.hpp" // 可以包含系统宏或底层辅助方法
+## 生命周期与内存规范
 
-namespace Bsp {
+- 避免运行时动态分配
+- 优先使用静态生命周期对象
+- 长驻驱动对象与应用对象应在系统初始化阶段创建完毕
 
-class Aht20Bsp : public App::ITempHumSensor {
-public:
-    Aht20Bsp(uint16_t sclPin, uint16_t sdaPin);
-    
-    bool init() override;
-    bool read(float& temperature, float& humidity) override;
-    
-private:
-    uint16_t m_sclPin;
-    uint16_t m_sdaPin;
-    
-    // 软件模拟 I2C 私有方法
-    void I2C_Start();
-    void I2C_Stop();
-};
+这与当前工程一致：`app_entry.cpp` 中主要对象均为静态对象。
 
-} // namespace Bsp
-```
+## CubeMX 协作规范
 
----
+- `.ioc` 负责外设初始化、GPIO 模式、DMA、NVIC、时钟等底层配置
+- 手写驱动逻辑放在 `BSP/`
+- 业务逻辑放在 `App/`
+- 每次重新生成代码后，都必须核对 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
 
-## ⚙️ 四、 `SYSTEM` 文件夹单一头文件策略
+## 文档维护规范
 
-为了避免项目中充斥着各种凌乱的 `define.h`、`parameter.h`，本规范强制要求 `SYSTEM/` 文件夹下**有且仅能有唯一头文件 `sys.hpp`**。
+- “当前实现”类文档只能描述当前工程真实状态
+- “研究/方案”类文档必须在开头显式标注其非当前实现属性
+- 涉及以下内容变更时，必须同步更新文档：
+  - 接线和 GPIO 复用
+  - `AppController` 的输入模型
+  - 总线默认实现
+  - 显示链路、DMA、中断和调试口约束
+  - CMake 构建方式
 
-### 4.1 `sys.hpp` 包含职责
-1.  **系统基础常数**：主频（72MHz）、I2C 速率、主控制循环周期。
-2.  **调试开关宏**：`SYS_DEBUG_MODE`，若开启，则启用串口日志输出，否则将其优化为空白。
-3.  **公共状态代码**：定义系统的核心状态枚举。
-4.  **轻量级内联工具**：如轻量级的临界区保护、原子延时等。
+## 不应再使用的过时假设
 
-### 4.2 `sys.hpp` 代码模板示例
-```cpp
-// SYSTEM/sys.hpp
-#pragma once
+以下说法不应再出现在“当前实现”文档中：
 
-#include <stdint.h>
-
-// 1. 系统底层参数定义
-#define SYS_CPU_FREQ_HZ         72000000U
-#define SYS_TICK_RATE_HZ        1000U
-#define SYS_MAIN_LOOP_PERIOD_MS 100U
-
-// 2. 调试输出开关
-#define SYS_DEBUG_ENABLED       1
-
-#if SYS_DEBUG_ENABLED
-    #include <stdio.h>
-    #define SYS_LOG(format, ...) printf("[SYS LOG] " format "\r\n", ##__VA_ARGS__)
-#else
-    #define SYS_LOG(format, ...) ((void)0)
-#endif
-
-// 3. 全局命名空间
-namespace Sys {
-
-// 系统通用错误代码
-enum class Status : uint8_t {
-    OK = 0,
-    ERROR_INIT,
-    ERROR_TIMEOUT,
-    ERROR_BUSY,
-    ERROR_OUT_OF_RANGE
-};
-
-// 全局安全关键区锁 (轻量级内联)
-inline void EnterCritical() {
-    __disable_irq();
-}
-
-inline void ExitCritical() {
-    __enable_irq();
-}
-
-} // namespace Sys
-```
-
----
-
-## 📝 五、 C++ 代码书写与命名规范
-
-为使项目固件呈现高端产品级品质，编码时需遵守以下风格：
-
-1.  **命名空间保护**：
-    *   所有应用逻辑位于 `namespace App`。
-    *   所有硬件驱动和适配器位于 `namespace Bsp`。
-    *   所有系统级宏与基础类型定义位于 `namespace Sys`。
-2.  **类与接口命名**：
-    *   抽象类/纯虚接口以大写 `I` 开头，采用驼峰命名法（如 `ISensor`, `IIndicator`）。
-    *   具体实现类在 `BSP` 层，以技术/芯片名为前缀，以 `Bsp` 或 `Sensor` 结尾（如 `Aht20Bsp`, `PwmLedBsp`）。
-3.  **成员变量命名**：
-    *   类私有成员变量以 `m_` 开头（如 `m_temperature`）。
-    *   静态常量以 `k` 开头且首字母大写（如 `const uint8_t kI2cAddress = 0x38;`）。
-4.  **接口文件自包含**：
-    *   所有头文件顶部必须使用 `#pragma once` 防止重复包含。
-    *   尽量前置声明（Forward Declaration）其他类指针，只在 `.cpp` 文件中进行具体类的包含，以极大缩短项目的编译构建时间。
+- “默认传感器总线是 `SoftI2cBsp`”
+- “`PA0/PA1` 绑定物理页切换/静音按键”
+- “旧 toolchain 文件 `cmake/stm32_gcc.cmake` 是当前构建入口”
+- “规范示例中的伪代码可直接代表当前接线或当前对象装配”

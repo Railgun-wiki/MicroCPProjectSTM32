@@ -1,5 +1,9 @@
 # FPGA LCD 透传配置说明
 
+> 配置说明文档，不是当前 MCU 固件行为的完整说明。
+>
+> 本文只覆盖 FPGA 透传接线与约束。若需确认 STM32 固件当前如何使用 LCD、触摸和 I2C2，请先参考 [Current_Integration_Status.md](./Current_Integration_Status.md)。
+
 ## 概述
 
 开发板上的 FPGA 作为 STM32 ARM 芯片与 LCD 底板连接器之间的**纯信号透传**模块。FPGA 内部没有任何逻辑、缓存或信号变换 -- ARM 侧的每个信号都直接连线到对应的 LCD 侧引脚。

@@ -1,5 +1,12 @@
 # CubeMX 与 BSP 边界
 
+本文件定义当前工程中哪些内容由 CubeMX 维护，哪些内容由 BSP 和 App 手写维护。
+
+相关文档：
+
+- [文档导航](./README.md)
+- [当前集成状态](./Current_Integration_Status.md)
+
 本项目采用“CubeMX 管配置、BSP 管行为”的边界约定。BSP 可以驱动引脚、访问设备，但不能再次配置已经在 `MicroCPProjectSTM32.ioc` 中声明过的 GPIO 模式、上下拉、速度、复用功能和外设时钟。
 
 ## 由 CubeMX 负责的配置

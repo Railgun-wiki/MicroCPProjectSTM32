@@ -1,118 +1,111 @@
-# STM32 C++ 固件库设计与开发参考文档 (MicroCPProjectSTM32 Docs)
+# MicroCPProjectSTM32 文档导航
 
-本设计文档中心为 **MicroCPProjectSTM32** 项目提供核心的系统架构、底层驱动规范以及接口 API 参考。
+本目录维护当前 STM32 固件工程的实现说明、接口文档、硬件边界和设计研究资料。
 
-本项目基于 **STM32F103** 平台，采用面向对象设计与 C++ 现代开发规范，构建了一套高度复用、松耦合的固件库体系，以支持底层驱动与上层应用逻辑的并行开发。
+当前工程的事实基线以源码和 `MicroCPProjectSTM32.ioc` 为准。阅读文档时，建议优先按以下顺序：
 
----
+1. [当前集成状态](./Current_Integration_Status.md)
+2. [CubeMX 与 BSP 边界](./CubeMX_BSP_Boundary.md)
+3. [API 接口参考](./API.md)
+4. [设计与开发规范](./Specification.md)
 
-## 🗺️ 文档导航
+## 当前工程摘要
 
-| 文档名称 | 核心内容介绍 | 适用阶段 / 读者 |
+- 当前运行链路：`AppController` -> `Aht20Bsp` / `Bmp280Bsp` / `LcdBsp` / `TouchBsp`
+- 当前传感器总线：`HardwareI2cBsp` + `I2C2` (`PB10` / `PB11`)
+- 当前显示链路：`SPI1` + `LcdBsp` + `GuiEngine`
+- 当前输入模型：触摸屏为主输入；`PA0` / `PA1` 已用于触摸，不绑定物理 `ButtonBsp`
+- 当前按钮注入：`app_entry.cpp` 中使用 `NullButton` 满足 `AppController` 的抽象依赖
+
+## 文档清单
+
+| 文档 | 作用 | 适合谁看 |
 | :--- | :--- | :--- |
-| [📐 设计与开发规范](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/Specification.md) | C++17 编译器优化配置、免 exceptions & RTTI 规范、目录职责、基于纯虚函数的控制反转（IoC）解耦机制。 | 基础规范 / 全体开发人员 |
-| [🔌 API 接口与类参考手册](file:///home/yuki/Documents/Coding/Project-Micro/MicroCPProjectSTM32/Docs/API.md) | 系统全局状态、抽象传感器/外设接口定义、BSP 驱动类（模拟 I2C、AHT20、BMP280、PWM 呼吸灯、按键消抖）详细函数原型、遥测结构体以及 C 语言桥接包装指南。 | 编码实践 / 底层与 UI 开发者 |
+| [Current_Integration_Status.md](./Current_Integration_Status.md) | 当前可运行工程的硬件映射、输入模型、DMA/SWD 约束。 | 所有维护者 |
+| [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md) | 约束哪些内容归 CubeMX，哪些内容归 BSP 和 App。 | 维护硬件初始化和驱动的开发者 |
+| [API.md](./API.md) | 当前抽象接口、驱动实现、关键数据结构和对象装配方式。 | 编码人员 |
+| [Specification.md](./Specification.md) | 目录职责、依赖倒置、编码和构建规范。 | 新加入项目的开发者 |
+| [FPGA_LCD_Setup.md](./FPGA_LCD_Setup.md) | FPGA 透传接线与约束说明。非当前 MCU 代码实现文档。 | 联调硬件人员 |
+| [FPGA_LCD_Logic_Expansion.md](./FPGA_LCD_Logic_Expansion.md) | FPGA 逻辑扩展方向研究。 | 架构预研 |
+| [Lightweight_GUI_Frameworks.md](./Lightweight_GUI_Frameworks.md) | 轻量 GUI 方案调研。 | GUI 预研 |
+| [Touch_GUI_Architecture.md](./Touch_GUI_Architecture.md) | 触摸 GUI 方向方案分析。 | GUI/交互预研 |
 
----
+## 当前硬件映射
 
-## 🛠️ 系统软硬件配置概览
+### 显示与触摸
 
-### 1. 物理引脚连接表 (Pinout)
-| 外设模块 | 外设型号 | STM32 物理引脚 | 配置模式 | 物理作用与连接说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| **复用 I2C 总线** | **AHT20 + BMP280** | **PB6 (SCL)**<br>**PB7 (SDA)** | 开漏输出 / 浮空输入 | **软件模拟 I2C 总线**。挂载 AHT20 (地址 `0x38`) 与 BMP280 (地址 `0x76`)，规避硬件 I2C 的潜在缺陷。 |
-| **指示指示灯** | **高亮 LED** | **PA6 (TIM3_CH1)** | 复用推挽输出 | 输出高频 PWM（频率约 1kHz）驱动 LED。支持正常平滑呼吸与异常 5Hz 爆闪。 |
-| **翻页按键 (KEY1)** | **轻触按键** | **PA0** | 上拉输入 | 检测按键按下，供主循环轮询触发 LCD 的数据显示切换。 |
-| **静音按键 (KEY2)** | **轻触按键** | **PA1** | 上拉输入 | 检测按键按下，在系统报警时用于静音消音；非报警时可做恢复。 |
+| 功能 | 引脚 | 说明 |
+| :--- | :--- | :--- |
+| `SPI1_SCK` | `PA5` | LCD SPI 时钟 |
+| `SPI1_MISO` | `PA6` | LCD 当前不读回数据，MISO 可保留 |
+| `SPI1_MOSI` | `PA7` | LCD SPI 数据输出 |
+| `LCD_LED` | `PB6` | 背光控制 |
+| `LCD_DC` | `PB7` | 数据/命令选择 |
+| `LCD_RST` | `PB8` | LCD 复位 |
+| `LCD_CS` | `PB9` | LCD 片选 |
+| `TOUCH_PEN` | `PA0` | 触摸按下检测 |
+| `TOUCH_DOUT` | `PA1` | 触摸串行输出 |
+| `TOUCH_TCLK` | `PA8` | 触摸时钟 |
+| `TOUCH_TDIN` | `PB3` | 触摸串行输入 |
+| `TOUCH_TCS` | `PB4` | 触摸片选 |
 
-### 2. 软件运行参数 (sys.hpp)
-*   **CPU 主频**：`72 MHz` (STM32F103 标称主频)
-*   **主循环轮询频率**：`10 Hz`（主业务状态机轮询周期 `100 ms`）
-*   **LED 动画采样步长**：`10 ms`（在定时器中断服务函数 `App_Timer_10ms_ISR` 中推进物理模拟）
-*   **按键消抖时间**：`20 ms`（连续 2 个定时器中断扫描周期检测为低电平判定为有效触发）
+### 传感器与其他外设
 
----
+| 功能 | 引脚 | 说明 |
+| :--- | :--- | :--- |
+| `I2C2_SCL` | `PB10` | AHT20 / BMP280 共用硬件 I2C |
+| `I2C2_SDA` | `PB11` | AHT20 / BMP280 共用硬件 I2C |
+| `TIM3_CH3` | `PB0` | `PwmLedBsp` 使用的 PWM 指示灯输出 |
+| `USART1_TX/RX` | `PA9` / `PA10` | 调试日志串口 |
 
-## ⚙️ 核心架构思想：依赖倒置原则 (DIP)
-
-本项目采用控制反转（IoC）与依赖注入（DI）模式，通过在应用层定义纯虚类接口实现业务逻辑与底层驱动的完全解耦。
+## 当前软件结构
 
 ```mermaid
 graph TD
-    subgraph "Application Layer (纯 C++, 平台无关)"
-        AppController[AppController 核心业务控制器]
-        ITempHumSensor[ITempHumSensor 抽象温湿接口]
-        IPressureSensor[IPressureSensor 抽象气压接口]
-        IIndicator[IIndicator 抽象指示灯接口]
-        IButton[IButton 抽象按键接口]
-    end
+    AppInit["App_Init()"]
+    AppLoop["App_Loop()"]
+    TimerISR["App_Timer_10ms_ISR()"]
 
-    subgraph "BSP Layer (硬件适配层, C++)"
-        Aht20Bsp[Aht20Bsp 驱动实现]
-        Bmp280Bsp[Bmp280Bsp 驱动实现]
-        PwmLedBsp[PwmLedBsp 动画驱动]
-        ButtonBsp[ButtonBsp 消抖驱动]
-        SoftI2cBsp[SoftI2cBsp 模拟 I2C]
-    end
+    AppInit --> I2C["HardwareI2cBsp"]
+    AppInit --> LCD["LcdBsp"]
+    AppInit --> Touch["TouchBsp"]
+    AppInit --> AppCtl["AppController"]
 
-    %% 应用层依赖抽象
-    AppController --> ITempHumSensor
-    AppController --> IPressureSensor
-    AppController --> IIndicator
-    AppController --> IButton
+    AppCtl --> TempHum["Aht20Bsp"]
+    AppCtl --> Pressure["Bmp280Bsp"]
+    AppCtl --> Indicator["PwmLedBsp"]
+    AppCtl --> PageBtn["NullButton : IButton"]
+    AppCtl --> MuteBtn["NullButton : IButton"]
+    AppCtl --> Display["ILcdDisplay / LcdBsp"]
+    AppCtl --> TouchIf["ITouch / TouchBsp"]
 
-    %% 驱动层实现抽象
-    ITempHumSensor -.-> Aht20Bsp
-    IPressureSensor -.-> Bmp280Bsp
-    IIndicator -.-> PwmLedBsp
-    IButton -.-> ButtonBsp
-
-    %% 总线复用
-    Aht20Bsp --> SoftI2cBsp
-    Bmp280Bsp --> SoftI2cBsp
+    AppLoop --> AppCtl
+    TimerISR --> Indicator
+    TimerISR --> PageBtn
+    TimerISR --> MuteBtn
 ```
 
-### 职责与交互机制
-*   **应用逻辑层 (App)**: 声明并依赖核心业务所需的抽象接口类（例如 `ITempHumSensor`, `IPressureSensor` 等）。
-*   **板级支持包 (BSP)**: 继承并实现这些纯虚接口，负责底层的具体硬件物理操作。
-*   **系统入口 (app_entry.cpp)**: 负责在系统初始化阶段以静态全局对象实例化具体实现类，并通过构造函数注入到 `AppController` 中。
+## 构建方式
 
----
-
-## 🏗️ 快速开始：构建与编译说明
-
-本项目采用 **CMake + Arm GCC** 构建链。您可以通过以下简单的步骤在本地进行编译构建：
-
-### 编译先决条件
-1. 安装 **GCC ARM Embedded Toolchain** (确保 `arm-none-eabi-gcc` 已经加入环境变量)。
-2. 安装 **CMake** (v3.15 或以上) 和 **Make** 或 **Ninja** 构建工具。
-
-### 构建步骤
-打开终端并运行以下命令：
+工程当前使用 CMake Presets 和 `cmake/gcc-arm-none-eabi.cmake`。
 
 ```bash
-# 1. 创建并进入 build 构建目录
-mkdir build && cd build
-
-# 2. 生成 Makefile
-cmake -DCMAKE_TOOLCHAIN_FILE=cmake/stm32_gcc.cmake ..
-
-# 3. 编译生成固件 (支持 ELF, HEX, BIN 格式)
-make -j4
+cmake --preset Debug
+cmake --build --preset Debug
 ```
 
-或者使用 cmake 的标准构建命令：
+如需发布构建：
+
 ```bash
-cube-cmake --build PATH_TO_PROJECT/Debug --
+cmake --preset Release
+cmake --build --preset Release
 ```
 
-> [!NOTE]
-> 编译完成后，生成的固件位于 `build` 文件夹下，包含 `MicroCPProjectSTM32.elf`、`MicroCPProjectSTM32.hex` 以及 `MicroCPProjectSTM32.bin`，可以直接使用 ST-Link Utility、OpenOCD 或 J-Link 工具烧录至 STM32F103 硬件开发板上。
+默认输出目录为 `build/Debug` 或 `build/Release`，产物包含 `MicroCPProjectSTM32.elf` 以及 CubeMX 规则生成的镜像文件。
 
-> [!IMPORTANT]
-> **架构边界原则**：对具体外设或引脚的修改仅限在板级支持包（BSP）层；应用层（App）逻辑修改禁止引入任何硬件相关的 API 或底层 HAL 库头文件。
-# 当前修订说明（2026-06）
+## 阅读约定
 
-- 当前工程的真实传感器总线为 `I2C2`（`PB10/PB11`），默认实现为 `HardwareI2cBsp`，不再以 `SoftI2cBsp` 作为运行时默认路径。
-- `PA0/PA1` 已明确作为触摸输入 `TOUCH_PEN/TOUCH_DOUT` 使用，不再绑定物理 `ButtonBsp`。
-- 维护时请优先阅读 `Current_Integration_Status.md` 与 `CubeMX_BSP_Boundary.md` 中的最新边界说明，再参考本 README 的历史架构描述。
+- 需要核对“当前工程到底怎么接、怎么跑”，先看 [Current_Integration_Status.md](./Current_Integration_Status.md)
+- 需要修改 `.ioc`、GPIO、DMA 或外设初始化，先看 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
+- 需要接驱动或改 `AppController` 依赖，先看 [API.md](./API.md)
+- 研究文档均不是当前实现说明；它们保留为备选方案或历史分析，使用前必须先对照当前状态文档

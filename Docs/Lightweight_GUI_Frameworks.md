@@ -1,5 +1,10 @@
 # F103C8 轻量级 GUI 框架选型
 
+> 研究文档，非当前实现说明。
+>
+> 当前工程的真实运行路径请先参考 [Current_Integration_Status.md](./Current_Integration_Status.md) 和 [API.md](./API.md)。
+> 本文保留为 GUI 选型与后续演进的备选分析，其中关于资源估算、控件需求和框架比较仍可参考，但不代表仓库当前已经集成这些框架。
+
 ## 约束
 
 | 资源 | F103C8 可用量 |
