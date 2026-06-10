@@ -17,7 +17,7 @@
   - `PB6` -> `LCD_LED`
   - `PB7` -> `LCD_DC`
   - `PB8` -> `LCD_RST`
-  - `PB9` -> `LCD_CS`
+  - `PB5` -> `LCD_CS`
 - 触摸引脚：
   - `PA0` -> `TOUCH_PEN`
   - `PA1` -> `TOUCH_DOUT`

@@ -9,8 +9,6 @@ namespace Bsp {
 namespace {
 
 constexpr uint32_t kSpiWaitTimeout = 100000U;
-GPIO_TypeDef* const kDiagnosticCsPort = GPIOB;
-constexpr uint16_t kDiagnosticCsPin = GPIO_PIN_5;
 
 static bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
 {
@@ -102,8 +100,6 @@ void LcdBsp::init()
     GPIO_InitStruct.Pin = m_ledPin;
     HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = kDiagnosticCsPin;
-    HAL_GPIO_Init(kDiagnosticCsPort, &GPIO_InitStruct);
     csHigh();
 
     // 3. 等待 LCD 上电稳定，再执行硬件复位
@@ -217,13 +213,11 @@ static bool spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
 void LcdBsp::csLow()
 {
     HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_RESET);
 }
 
 void LcdBsp::csHigh()
 {
     HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_SET);
 }
 
 void LcdBsp::writeCmd(uint8_t cmd)

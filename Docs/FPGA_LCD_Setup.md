@@ -107,12 +107,12 @@ set_property PACKAGE_PIN M22  [get_ports SDI_BASE]
 | PA5 | SPI1_SCK |
 | PA6 | SPI1_MISO（可保留，LCD 不读取也可不接） |
 | PA7 | SPI1_MOSI |
-| PB9 | LCD_CS |
+| PB5 | LCD_CS |
 | PB7 | LCD_DC/RS |
 | PB8 | LCD_RST |
 | PB6 | LCD_LED（背光） |
 
-注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB9/PB7/PB8/PB6）由 `LcdBsp::init()` 方法初始化。
+注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB5/PB7/PB8/PB6）由 `LcdBsp::init()` 方法初始化。
 
 ## SPI 配置
 

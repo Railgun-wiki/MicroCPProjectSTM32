@@ -322,7 +322,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 说明：
 
 - 当前使用 `SPI1`
-- 当前接线按 `PB9 CS`、`PB7 DC`、`PB8 RST`、`PB6 LED`
+- 当前接线按 `PB5 CS`、`PB7 DC`、`PB8 RST`、`PB6 LED`
 - 负责 LCD 初始化、像素绘制、矩形填充、字符和浮点渲染
 - 持有 `GuiEngine*`，通过 `setGui()` 注入
 - `update(const RenderData&)` 根据 `currentViewPage` 渲染调试页面

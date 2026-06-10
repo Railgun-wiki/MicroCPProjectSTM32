@@ -42,7 +42,7 @@
 | `LCD_LED` | `PB6` | 背光控制 |
 | `LCD_DC` | `PB7` | 数据/命令选择 |
 | `LCD_RST` | `PB8` | LCD 复位 |
-| `LCD_CS` | `PB9` | LCD 片选 |
+| `LCD_CS` | `PB5` | LCD 片选 |
 | `TOUCH_PEN` | `PA0` | 触摸按下检测 |
 | `TOUCH_DOUT` | `PA1` | 触摸串行输出 |
 | `TOUCH_TCLK` | `PA8` | 触摸时钟 |

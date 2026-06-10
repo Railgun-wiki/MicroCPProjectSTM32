@@ -12,7 +12,7 @@
 ## 由 CubeMX 负责的配置
 
 - LCD SPI 总线：`SPI1`，mode 0（`CPOL_LOW`、`CPHA_1EDGE`），分频 `/2`
-- LCD 控制引脚：`PB6 LCD_LED`、`PB7 LCD_DC`、`PB8 LCD_RST`、`PB9 LCD_CS`，均为高速推挽输出
+- LCD 控制引脚：`PB6 LCD_LED`、`PB7 LCD_DC`、`PB8 LCD_RST`、`PB5 LCD_CS`，均为高速推挽输出
 - 触摸 bit-bang 引脚：`PA8 TOUCH_TCLK`、`PB3 TOUCH_TDIN`、`PB4 TOUCH_TCS`，均为高速推挽输出
 - 触摸输入引脚：`PA0 TOUCH_PEN`、`PA1 TOUCH_DOUT`，均为上拉输入
 - `PA0/PA1` 在本工程中为触摸专用，不再绑定 `ButtonBsp`
