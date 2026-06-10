@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ !startsWith(github.event.head_commit.message, 'doc') && !startsWith(github.event.pull_request.title, 'doc') }}
     name: Build Firmware
     runs-on: ubuntu-latest
 
