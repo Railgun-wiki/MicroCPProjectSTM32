@@ -20,16 +20,15 @@ void SoftI2cBsp::init()
     if (m_sclPort == GPIOB || m_sdaPort == GPIOB) __HAL_RCC_GPIOB_CLK_ENABLE();
     if (m_sclPort == GPIOC || m_sdaPort == GPIOC) __HAL_RCC_GPIOC_CLK_ENABLE();
 
-    // 配置 SCL 为开漏输出 (带上拉)
+    // 配置 SCL 为推挽输出 (主动强驱高低电平)
     GPIO_InitStruct.Pin = m_sclPin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(m_sclPort, &GPIO_InitStruct);
 
-    // 配置 SDA 为开漏输出 (带上拉)
-    GPIO_InitStruct.Pin = m_sdaPin;
-    HAL_GPIO_Init(m_sdaPort, &GPIO_InitStruct);
+    // 配置 SDA 为推挽输出
+    sdaOut();
 
     // 总线空闲状态：SCL 和 SDA 均为高电平
     HAL_GPIO_WritePin(m_sclPort, m_sclPin, GPIO_PIN_SET);
@@ -45,12 +44,20 @@ void SoftI2cBsp::delayUs()
 
 void SoftI2cBsp::sdaOut()
 {
-    // 由于采用开漏 (Open-Drain) 模式配置，SDA 可以直接输出，也可以直接读取输入
-    // 无需在运行时动态频繁重构 GPIO 寄存器，极大提升通信稳定度和速度
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = m_sdaPin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP; // 推挽输出
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(m_sdaPort, &GPIO_InitStruct);
 }
 
 void SoftI2cBsp::sdaIn()
 {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = m_sdaPin;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;     // 输入模式
+    GPIO_InitStruct.Pull = GPIO_PULLUP;         // 开启内部上拉电阻！
+    HAL_GPIO_Init(m_sdaPort, &GPIO_InitStruct);
 }
 
 void SoftI2cBsp::start()
@@ -96,24 +103,31 @@ void SoftI2cBsp::sendNack()
 
 bool SoftI2cBsp::waitAck()
 {
-    HAL_GPIO_WritePin(m_sdaPort, m_sdaPin, GPIO_PIN_SET); // 释放 SDA 总线
+    sdaIn(); // 切换为输入，启用内部上拉
     delayUs();
+    
     HAL_GPIO_WritePin(m_sclPort, m_sclPin, GPIO_PIN_SET);
     delayUs();
     
     uint16_t timeout = 0;
+    bool ack = true;
     while (HAL_GPIO_ReadPin(m_sdaPort, m_sdaPin) == GPIO_PIN_SET) {
         timeout++;
         if (timeout > 500) {
-            stop();
-            return false;
+            ack = false;
+            break;
         }
         delayUs();
     }
     
     HAL_GPIO_WritePin(m_sclPort, m_sclPin, GPIO_PIN_RESET);
     delayUs();
-    return true;
+    
+    sdaOut(); // 恢复输出模式
+    if (!ack) {
+        stop();
+    }
+    return ack;
 }
 
 void SoftI2cBsp::writeByte(uint8_t byte)
@@ -136,7 +150,7 @@ void SoftI2cBsp::writeByte(uint8_t byte)
 uint8_t SoftI2cBsp::readByte(bool ack)
 {
     uint8_t byte = 0;
-    HAL_GPIO_WritePin(m_sdaPort, m_sdaPin, GPIO_PIN_SET); // 释放 SDA，准备读取
+    sdaIn(); // 切换为输入，启用内部上拉
     delayUs();
     
     for (uint8_t i = 0; i < 8; i++) {
@@ -150,6 +164,7 @@ uint8_t SoftI2cBsp::readByte(bool ack)
         delayUs();
     }
     
+    sdaOut(); // 恢复输出，准备发送 ACK/NACK
     if (ack) {
         sendAck();
     } else {

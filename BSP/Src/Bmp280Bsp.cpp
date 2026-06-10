@@ -1,5 +1,6 @@
 // BSP/Src/Bmp280Bsp.cpp
 #include "Bmp280Bsp.hpp"
+#include "stm32f1xx_hal.h"
 #include <math.h>
 
 namespace Bsp {

@@ -8,40 +8,18 @@ namespace Bsp {
 
 namespace {
 
-constexpr uint32_t kSpiFlagTimeout = 100000U;
+constexpr uint32_t kSpiWaitTimeout = 100000U;
+GPIO_TypeDef* const kDiagnosticCsPort = GPIOB;
+constexpr uint16_t kDiagnosticCsPin = GPIO_PIN_5;
 
-bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
+static bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
 {
-    uint32_t timeout = kSpiFlagTimeout;
+    uint32_t timeout = kSpiWaitTimeout;
     while ((SPIx->SR & flag) == 0U) {
         if (--timeout == 0U) {
             return false;
         }
     }
-    return true;
-}
-
-bool waitForSpiFlagClear(SPI_TypeDef* SPIx, uint32_t flag)
-{
-    uint32_t timeout = kSpiFlagTimeout;
-    while ((SPIx->SR & flag) != 0U) {
-        if (--timeout == 0U) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
-{
-    if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
-        return false;
-    }
-    SPIx->DR = data;
-    if (!waitForSpiFlagSet(SPIx, SPI_SR_RXNE)) {
-        return false;
-    }
-    (void)SPIx->DR;
     return true;
 }
 
@@ -66,17 +44,56 @@ LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
 
 void LcdBsp::init()
 {
+    printf("[LCD] LCD init start\r\n");
+
+    // 1. 动态启用 GPIO 端口时钟
+    if (m_csPort == GPIOA || m_rsPort == GPIOA || m_rstPort == GPIOA || m_ledPort == GPIOA) {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+    }
+    if (m_csPort == GPIOB || m_rsPort == GPIOB || m_rstPort == GPIOB || m_ledPort == GPIOB) {
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+    }
+    if (m_csPort == GPIOC || m_rsPort == GPIOC || m_rstPort == GPIOC || m_ledPort == GPIOC) {
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+    }
+
+    // 2. 初始化 GPIO 控制引脚为推挽输出模式
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+
+    GPIO_InitStruct.Pin = m_csPin;
+    HAL_GPIO_Init(m_csPort, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = m_rsPin;
+    HAL_GPIO_Init(m_rsPort, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = m_rstPin;
+    HAL_GPIO_Init(m_rstPort, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = m_ledPin;
+    HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = kDiagnosticCsPin;
+    HAL_GPIO_Init(kDiagnosticCsPort, &GPIO_InitStruct);
+    csHigh();
+
+    // 3. 等待 LCD 上电稳定，再执行硬件复位
     HAL_Delay(500);
     reset();
-    ledOn();
 
-    if ((m_hspi->Instance->CR1 & SPI_CR1_SPE) == 0U) {
+    // 4. 先打开背光并显式启用 SPI，避免寄存器直写卡在 RXNE 等待。
+    ledOn();
+    printf("[LCD] backlight on\r\n");
+    if ((m_hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE) {
         __HAL_SPI_ENABLE(m_hspi);
     }
     (void)m_hspi->Instance->DR;
     (void)m_hspi->Instance->SR;
+    printf("[LCD] spi enabled\r\n");
 
-    // 4. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
+    // 5. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
     writeCmd(0xF0); writeData(0xC3);
     writeCmd(0xF0); writeData(0x96);
     
@@ -140,6 +157,7 @@ void LcdBsp::init()
     writeCmd(0x11); // 退出睡眠模式
     HAL_Delay(120);
     writeCmd(0x29); // 开启显示屏
+    printf("[LCD] init sequence done\r\n");
 }
 
 void LcdBsp::reset()
@@ -150,11 +168,42 @@ void LcdBsp::reset()
     HAL_Delay(50);
 }
 
+// SPI 单字节发送（与参考工程 SPI_WriteByte 一致，诊断阶段加超时）
+static bool spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
+{
+    if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
+        printf("[LCD] SPI timeout waiting TXE before 0x%02X\r\n", data);
+        return false;
+    }
+    SPIx->DR = data;
+    if (!waitForSpiFlagSet(SPIx, SPI_SR_RXNE)) {
+        printf("[LCD] SPI timeout waiting RXNE after 0x%02X SR=0x%04lX CR1=0x%04lX\r\n",
+               data,
+               static_cast<unsigned long>(SPIx->SR),
+               static_cast<unsigned long>(SPIx->CR1));
+        return false;
+    }
+    (void)SPIx->DR;
+    return true;
+}
+
+void LcdBsp::csLow()
+{
+    HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_RESET);
+}
+
+void LcdBsp::csHigh()
+{
+    HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_SET);
+}
+
 void LcdBsp::writeCmd(uint8_t cmd)
 {
     csLow();
     rsLow();
-    (void)spiWriteByte(m_hspi->Instance, cmd);
+    spiWriteByte(m_hspi->Instance, cmd);
     csHigh();
 }
 
@@ -162,7 +211,7 @@ void LcdBsp::writeData(uint8_t data)
 {
     csLow();
     rsHigh();
-    (void)spiWriteByte(m_hspi->Instance, data);
+    spiWriteByte(m_hspi->Instance, data);
     csHigh();
 }
 
@@ -170,8 +219,8 @@ void LcdBsp::writeData16(uint16_t data)
 {
     csLow();
     rsHigh();
-    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data >> 8));
-    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data & 0xFF));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data >> 8));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(data & 0xFF));
     csHigh();
 }
 
@@ -203,8 +252,8 @@ void LcdBsp::drawPixel(uint16_t x, uint16_t y, uint16_t color)
     setAddressWindow(x, y, x, y);
     csLow();
     rsHigh();
-    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color >> 8));
-    (void)spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color & 0xFF));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color >> 8));
+    spiWriteByte(m_hspi->Instance, static_cast<uint8_t>(color & 0xFF));
     csHigh();
 }
 
@@ -226,17 +275,13 @@ void LcdBsp::fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
 
     // 高频极速寄存器直接写入，消除 HAL 库状态自检的循环延时
     for (uint32_t i = 0; i < numPixels; ++i) {
-        if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
-            break;
-        }
+        while (!(SPIx->SR & SPI_SR_TXE));
         SPIx->DR = high;
-        if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
-            break;
-        }
+        while (!(SPIx->SR & SPI_SR_TXE));
         SPIx->DR = low;
     }
 
-    (void)waitForSpiFlagClear(SPIx, SPI_SR_BSY);
+    while (SPIx->SR & SPI_SR_BSY);
     (void)SPIx->DR; // clear RXNE to prevent OVR overrun
     (void)SPIx->SR; // clear OVR flag
     csHigh();
@@ -314,6 +359,21 @@ void LcdBsp::drawFloat(uint16_t x, uint16_t y, float value,
     drawString(x, y, buf, fc, bc, size);
 }
 
+void LcdBsp::drawCenteredString(uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size)
+{
+    fillRect(0, y, m_width - 1, y + size - 1, bc);
+    uint16_t len = 0;
+    while (str[len]) {
+        len++;
+    }
+    uint16_t strWidth = len * (size / 2);
+    uint16_t x = 0;
+    if (m_width > strWidth) {
+        x = (m_width - strWidth) / 2;
+    }
+    drawString(x, y, str, fc, bc, size);
+}
+
 void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
 {
     // 如果页面发生改变，或者初次渲染，进行全屏擦除并强制全局重绘
@@ -348,10 +408,10 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
     bool connChanged = (data.tempHumConnected != m_lastTempHumConn);
     if (forceRedraw || connChanged) {
         if (!data.tempHumConnected) {
-            drawString(40, 75, "TEMP: Unconnected      ", kColorRed, kColorBlack, 16);
-            drawString(40, 100, "                        ", kColorBlack, kColorBlack, 16);
-            drawString(40, 140, "HUMI: Unconnected      ", kColorRed, kColorBlack, 16);
-            drawString(40, 165, "                        ", kColorBlack, kColorBlack, 16);
+            drawCenteredString(80, "TEMP: Unconnected", kColorRed, kColorBlack, 16);
+            drawCenteredString(110, "", kColorBlack, kColorBlack, 16);
+            drawCenteredString(150, "HUMI: Unconnected", kColorRed, kColorBlack, 16);
+            drawCenteredString(180, "", kColorBlack, kColorBlack, 16);
         }
         m_lastTempHumConn = data.tempHumConnected;
         // 重置缓存，确保传感器重新连接后立即刷新数值
@@ -362,25 +422,25 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
     if (data.tempHumConnected) {
         // --- 温度 ---
         if (forceRedraw || data.temperature != m_lastTemp) {
-            sprintf(buf, "TEMP: %6.2f C  ", data.temperature);
-            drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
+            sprintf(buf, "TEMP: %.2f C", data.temperature);
+            drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastTemp = data.temperature;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "TEMP LIMIT: %4.1f ~ %4.1f C", data.tempLowLimit, data.tempHighLimit);
-            drawString(40, 100, buf, kColorGray, kColorBlack, 16);
+            sprintf(buf, "TEMP LIMIT: %.1f ~ %.1f C", data.tempLowLimit, data.tempHighLimit);
+            drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 湿度 ---
         if (forceRedraw || data.humidity != m_lastHum) {
-            sprintf(buf, "HUMI: %6.2f %%  ", data.humidity);
-            drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
+            sprintf(buf, "HUMI: %.2f %%", data.humidity);
+            drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastHum = data.humidity;
         }
 
         if (forceRedraw) {
-            drawString(40, 165, "HUMI LIMIT:  0.0 ~ 100.0 %", kColorGray, kColorBlack, 16);
+            drawCenteredString(180, "HUMI LIMIT: 0.0 ~ 100.0 %", kColorGray, kColorBlack, 16);
         }
     }
 }
@@ -393,10 +453,10 @@ void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool
     bool connChanged = (data.pressureConnected != m_lastPressConn);
     if (forceRedraw || connChanged) {
         if (!data.pressureConnected) {
-            drawString(40, 75, "PRES: Unconnected       ", kColorRed, kColorBlack, 16);
-            drawString(40, 100, "                        ", kColorBlack, kColorBlack, 16);
-            drawString(40, 140, "ALTI: Unconnected       ", kColorRed, kColorBlack, 16);
-            drawString(40, 165, "                        ", kColorBlack, kColorBlack, 16);
+            drawCenteredString(80, "PRES: Unconnected", kColorRed, kColorBlack, 16);
+            drawCenteredString(110, "", kColorBlack, kColorBlack, 16);
+            drawCenteredString(150, "ALTI: Unconnected", kColorRed, kColorBlack, 16);
+            drawCenteredString(180, "", kColorBlack, kColorBlack, 16);
         }
         m_lastPressConn = data.pressureConnected;
         // 重置缓存，确保传感器重新连接后立即刷新数值
@@ -407,25 +467,25 @@ void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool
     if (data.pressureConnected) {
         // --- 大气压强 ---
         if (forceRedraw || data.pressure != m_lastPress) {
-            sprintf(buf, "PRES: %8.1f Pa  ", data.pressure);
-            drawString(40, 75, buf, kColorWhite, kColorBlack, 16);
+            sprintf(buf, "PRES: %.1f Pa", data.pressure);
+            drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastPress = data.pressure;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "PRES LIMIT: %6.0f ~ %6.0f Pa", data.pressLowLimit, data.pressHighLimit);
-            drawString(40, 100, buf, kColorGray, kColorBlack, 16);
+            sprintf(buf, "PRES LIMIT: %.0f ~ %.0f Pa", data.pressLowLimit, data.pressHighLimit);
+            drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 海拔 ---
         if (forceRedraw || data.altitude != m_lastAlt) {
-            sprintf(buf, "ALTI: %8.2f m   ", data.altitude);
-            drawString(40, 140, buf, kColorWhite, kColorBlack, 16);
+            sprintf(buf, "ALTI: %.2f m", data.altitude);
+            drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastAlt = data.altitude;
         }
 
         if (forceRedraw) {
-            drawString(40, 165, "ALTI CALC: Barometric Formula", kColorGray, kColorBlack, 16);
+            drawCenteredString(180, "ALTI CALC: Barometric Formula", kColorGray, kColorBlack, 16);
         }
     }
 }

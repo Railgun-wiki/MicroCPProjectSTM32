@@ -2,7 +2,7 @@
 #include "app_entry.h"
 #include "main.h"
 #include "sys.hpp"
-#include "HardwareI2cBsp.hpp"
+#include "SoftI2cBsp.hpp"
 #include "Aht20Bsp.hpp"
 #include "Bmp280Bsp.hpp"
 #include "PwmLedBsp.hpp"
@@ -11,6 +11,9 @@
 #include "GuiEngine.hpp"
 #include "TouchBsp.hpp"
 #include "AppController.hpp"
+
+#include <stdio.h>
+#include <string.h>
 
 extern TIM_HandleTypeDef htim3;
 extern SPI_HandleTypeDef hspi1;
@@ -26,7 +29,7 @@ public:
 
 } // namespace
 
-static Bsp::HardwareI2cBsp g_I2cBus(&hi2c2);
+static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
 
 static Bsp::Aht20Bsp  g_Aht20(g_I2cBus);
 static Bsp::Bmp280Bsp g_Bmp280(g_I2cBus);
@@ -60,6 +63,28 @@ void App_Init(void)
     g_I2cBus.init();
     g_Lcd.setGui(&g_Gui);
     g_Touch.init();
+
+    // Diagnostic I2C scanner on boot
+    g_Lcd.init();
+    g_Lcd.clear(0x0000); // Clear to Black
+    g_Lcd.drawString(20, 50, "Scanning I2C2 Bus...", 0xFFFF, 0x0000, 16);
+    
+    char scanBuf[128] = "Devices: ";
+    int count = 0;
+    for (uint16_t i = 1; i < 128; i++) {
+        if (g_I2cBus.directWrite(i, nullptr, 0) == Sys::Status::OK) {
+            char addrBuf[12];
+            sprintf(addrBuf, "0x%02X ", i);
+            strcat(scanBuf, addrBuf);
+            count++;
+        }
+    }
+    if (count == 0) {
+        strcat(scanBuf, "None");
+    }
+    g_Lcd.drawString(20, 80, scanBuf, 0xFFE0, 0x0000, 16);
+    HAL_Delay(2000); // Show for 2 seconds
+
     g_App.setup();
 
     SYS_LOG("C++ application initialized successfully.");

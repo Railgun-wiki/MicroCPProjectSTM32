@@ -1,5 +1,6 @@
 // BSP/Src/Aht20Bsp.cpp
 #include "Aht20Bsp.hpp"
+#include "stm32f1xx_hal.h"
 
 namespace Bsp {
 
