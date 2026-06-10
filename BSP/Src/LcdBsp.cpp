@@ -23,6 +23,33 @@ static bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
     return true;
 }
 
+// 模拟浮点数转整型字符串方法（规避 --specs=nano.specs 下对 %f 的支持限制）
+static void formatFloat(char* dest, const char* prefix, float val, const char* suffix, int precision)
+{
+    int intPart = static_cast<int>(val);
+    float diff = val - intPart;
+    if (diff < 0) diff = -diff;
+    
+    int fracPart = 0;
+    if (precision == 1) {
+        fracPart = static_cast<int>(diff * 10.0f + 0.5f);
+        if (fracPart >= 10) {
+            fracPart = 0;
+            if (val >= 0) intPart++;
+            else intPart--;
+        }
+        sprintf(dest, "%s%d.%d%s", prefix, intPart, fracPart, suffix);
+    } else { // precision == 2
+        fracPart = static_cast<int>(diff * 100.0f + 0.5f);
+        if (fracPart >= 100) {
+            fracPart = 0;
+            if (val >= 0) intPart++;
+            else intPart--;
+        }
+        sprintf(dest, "%s%d.%02d%s", prefix, intPart, fracPart, suffix);
+    }
+}
+
 } // namespace
 
 LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
@@ -402,7 +429,7 @@ void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
 
 void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
 {
-    char buf[40];
+    char buf[64];
 
     // --- 温湿度传感器数据调试行 ---
     bool connChanged = (data.tempHumConnected != m_lastTempHumConn);
@@ -422,19 +449,22 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
     if (data.tempHumConnected) {
         // --- 温度 ---
         if (forceRedraw || data.temperature != m_lastTemp) {
-            sprintf(buf, "TEMP: %.2f C", data.temperature);
+            formatFloat(buf, "TEMP: ", data.temperature, " C", 2);
             drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastTemp = data.temperature;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "TEMP LIMIT: %.1f ~ %.1f C", data.tempLowLimit, data.tempHighLimit);
+            char lowBuf[20], highBuf[20];
+            formatFloat(lowBuf, "", data.tempLowLimit, "", 1);
+            formatFloat(highBuf, "", data.tempHighLimit, "", 1);
+            sprintf(buf, "TEMP LIMIT: %s ~ %s C", lowBuf, highBuf);
             drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 湿度 ---
         if (forceRedraw || data.humidity != m_lastHum) {
-            sprintf(buf, "HUMI: %.2f %%", data.humidity);
+            formatFloat(buf, "HUMI: ", data.humidity, " %", 2);
             drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastHum = data.humidity;
         }
@@ -447,7 +477,7 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
 
 void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
 {
-    char buf[40];
+    char buf[64];
 
     // --- 气压传感器数据调试行 ---
     bool connChanged = (data.pressureConnected != m_lastPressConn);
@@ -467,19 +497,19 @@ void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool
     if (data.pressureConnected) {
         // --- 大气压强 ---
         if (forceRedraw || data.pressure != m_lastPress) {
-            sprintf(buf, "PRES: %.1f Pa", data.pressure);
+            formatFloat(buf, "PRES: ", data.pressure, " Pa", 1);
             drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastPress = data.pressure;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "PRES LIMIT: %.0f ~ %.0f Pa", data.pressLowLimit, data.pressHighLimit);
+            sprintf(buf, "PRES LIMIT: %d ~ %d Pa", static_cast<int>(data.pressLowLimit), static_cast<int>(data.pressHighLimit));
             drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 海拔 ---
         if (forceRedraw || data.altitude != m_lastAlt) {
-            sprintf(buf, "ALTI: %.2f m", data.altitude);
+            formatFloat(buf, "ALTI: ", data.altitude, " m", 2);
             drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastAlt = data.altitude;
         }

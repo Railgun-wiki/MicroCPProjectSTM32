@@ -2,7 +2,7 @@
 #include "app_entry.h"
 #include "main.h"
 #include "sys.hpp"
-#include "SoftI2cBsp.hpp"
+#include "HardwareI2cBsp.hpp"
 #include "Aht20Bsp.hpp"
 #include "Bmp280Bsp.hpp"
 #include "PwmLedBsp.hpp"
@@ -29,7 +29,7 @@ public:
 
 } // namespace
 
-static Bsp::SoftI2cBsp g_I2cBus(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
+static Bsp::HardwareI2cBsp g_I2cBus(&hi2c2);
 
 static Bsp::Aht20Bsp  g_Aht20(g_I2cBus);
 static Bsp::Bmp280Bsp g_Bmp280(g_I2cBus);
@@ -72,7 +72,7 @@ void App_Init(void)
     char scanBuf[128] = "Devices: ";
     int count = 0;
     for (uint16_t i = 1; i < 128; i++) {
-        if (g_I2cBus.directWrite(i, nullptr, 0) == Sys::Status::OK) {
+        if (HAL_I2C_IsDeviceReady(&hi2c2, i << 1, 1, 10) == HAL_OK) {
             char addrBuf[12];
             sprintf(addrBuf, "0x%02X ", i);
             strcat(scanBuf, addrBuf);
