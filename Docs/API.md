@@ -271,7 +271,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 说明：
 
-- 仍保留在仓库中，作为备选总线实现
+- 仍保留在仓库中，作为备选总线实现（近期已优化 SDA 引脚在推挽输出与内部上拉输入模式间的动态切换以提升稳定性）
 - 当前不是运行路径
 - 任何重新启用动作都必须同步修订当前状态文档和 `.ioc` 配置说明
 
@@ -323,7 +323,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 - 当前使用 `SPI1`
 - 当前接线按 `PB5 CS`、`PB7 DC`、`PB8 RST`、`PB6 LED`
-- 负责 LCD 初始化、像素绘制、矩形填充、字符和浮点渲染
+- 负责 LCD 初始化、像素绘制、矩形填充、字符和浮点渲染（内置 `drawCenteredString` 与 `formatFloat` 辅助能力，用于规避 nano.specs 导致的 sprintf 浮点打印问题）
 - 持有 `GuiEngine*`，通过 `setGui()` 注入
 - `update(const RenderData&)` 根据 `currentViewPage` 渲染调试页面
 
