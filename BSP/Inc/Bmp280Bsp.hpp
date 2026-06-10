@@ -10,7 +10,7 @@ public:
     Bmp280Bsp(II2cBus& i2cBus);
     
     Sys::Status init() override;
-    Sys::Status read(float& pressure, float& altitude) override;
+    Sys::Status read(uint32_t& pressure, int32_t& altitude) override;
 
 private:
     // 出厂标定参数结构体 (dig_T1 ~ dig_T3, dig_P1 ~ dig_P9)
@@ -34,8 +34,8 @@ private:
     bool m_initialized{false};
 
     Sys::Status loadCalibration();
-    float compensateT(int32_t adcT);
-    float compensateP(int32_t adcP);
+    int32_t compensateT(int32_t adcT);
+    uint32_t compensateP(int32_t adcP);
 };
 
 } // namespace Bsp

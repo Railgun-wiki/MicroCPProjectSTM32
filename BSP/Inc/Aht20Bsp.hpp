@@ -11,7 +11,7 @@ public:
     Aht20Bsp(II2cBus& i2cBus);
     
     Sys::Status init() override;
-    Sys::Status read(float& temperature, float& humidity) override;
+    Sys::Status read(int32_t& temperature, int32_t& humidity) override;
 
 private:
     II2cBus& m_i2c;

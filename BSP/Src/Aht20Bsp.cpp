@@ -35,7 +35,7 @@ Sys::Status Aht20Bsp::init()
     return Sys::Status::OK;
 }
 
-Sys::Status Aht20Bsp::read(float& temperature, float& humidity)
+Sys::Status Aht20Bsp::read(int32_t& temperature, int32_t& humidity)
 {
     if (!m_initialized) {
         if (init() != Sys::Status::OK) {
@@ -67,11 +67,11 @@ Sys::Status Aht20Bsp::read(float& temperature, float& humidity)
     uint32_t rawHumidity = ((uint32_t)buffer[1] << 12) | ((uint32_t)buffer[2] << 4) | ((uint32_t)buffer[3] >> 4);
     uint32_t rawTemperature = (((uint32_t)buffer[3] & 0x0F) << 16) | ((uint32_t)buffer[4] << 8) | (uint32_t)buffer[5];
 
-    // 相对湿度换算: RH% = S_RH / 2^20 * 100
-    humidity = ((float)rawHumidity / 1048576.0f) * 100.0f;
+    // 相对湿度换算(放大10倍): RH% = S_RH / 2^20 * 1000
+    humidity = (int32_t)((rawHumidity * 1000) >> 20);
 
-    // 温度换算: T = S_T / 2^20 * 200 - 50
-    temperature = ((float)rawTemperature / 1048576.0f) * 200.0f - 50.0f;
+    // 温度换算(放大10倍): T = S_T / 2^20 * 2000 - 500
+    temperature = (int32_t)(((rawTemperature * 2000) >> 20) - 500);
 
     return Sys::Status::OK;
 }

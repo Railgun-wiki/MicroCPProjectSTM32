@@ -45,8 +45,8 @@ public:
     // 文本渲染（需要 SPI 寄存器级批量写入优化，保留在硬件层）
     void drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size);
     void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
-    void drawFloat(uint16_t x, uint16_t y, float value, uint8_t intDigits,
-                   uint8_t fracDigits, uint16_t fc, uint16_t bc, uint8_t size);
+    void drawScaledInt(uint16_t x, uint16_t y, int32_t value, uint8_t intDigits,
+                       uint8_t fracDigits, uint16_t fc, uint16_t bc, uint8_t size);
 
     // 访问内部几何绘图引擎
     GuiEngine& gui() { return *m_gui; }
@@ -71,10 +71,10 @@ private:
 
     // 缓存上一次渲染的关键数据，用于局部刷新防止闪烁
     uint8_t m_lastPage{255};
-    float m_lastTemp{-999.0f};
-    float m_lastHum{-999.0f};
-    float m_lastPress{-999.0f};
-    float m_lastAlt{-999.0f};
+    int32_t m_lastTemp{-9999};
+    int32_t m_lastHum{-9999};
+    uint32_t m_lastPress{0};
+    int32_t m_lastAlt{-9999};
     Sys::AlarmState m_lastAlarmState{Sys::AlarmState::NORMAL};
     bool m_lastMute{false};
     bool m_lastTempHumConn{true};

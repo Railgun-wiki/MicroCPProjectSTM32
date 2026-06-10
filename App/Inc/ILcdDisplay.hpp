@@ -49,15 +49,15 @@ public:
      * @brief LCD 渲染的解耦遥测数据包
      */
     struct RenderData {
-        float temperature;        ///< 实时环境温度
-        float humidity;           ///< 实时环境湿度
-        float pressure;           ///< 实时大气压强
-        float altitude;           ///< 测算海拔高度
+        int32_t temperature;      ///< 实时环境温度 (放大10倍)
+        int32_t humidity;         ///< 实时环境湿度 (放大10倍)
+        uint32_t pressure;        ///< 实时大气压强 (Pa)
+        int32_t altitude;         ///< 测算海拔高度 (放大10倍)
 
-        float tempHighLimit;      ///< 温度报警上限值
-        float tempLowLimit;       ///< 温度报警下限值
-        float pressHighLimit;     ///< 气压报警上限值
-        float pressLowLimit;      ///< 气压报警下限值
+        int32_t tempHighLimit;    ///< 温度报警上限值 (放大10倍)
+        int32_t tempLowLimit;     ///< 温度报警下限值 (放大10倍)
+        uint32_t pressHighLimit;  ///< 气压报警上限值 (Pa)
+        uint32_t pressLowLimit;   ///< 气压报警下限值 (Pa)
 
         Sys::AlarmState alarmState; ///< 系统当前的报警状态
         uint8_t currentViewPage;  ///< 当前活动的分页页码 (0 或 1)

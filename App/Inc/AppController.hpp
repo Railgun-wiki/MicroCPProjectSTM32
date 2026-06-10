@@ -23,15 +23,15 @@ public:
 
     // 传感器遥测数据采集结构体 (用于由成员 B 读取直接更新 UI)
     struct TelemetryData {
-        float temperature{0.0f};
-        float humidity{0.0f};
-        float pressure{0.0f};
-        float altitude{0.0f};
+        int32_t temperature{0};
+        int32_t humidity{0};
+        uint32_t pressure{0};
+        int32_t altitude{0};
         
-        float tempHighLimit{35.0f};
-        float tempLowLimit{10.0f};
-        float pressHighLimit{103000.0f}; // 1030 hPa
-        float pressLowLimit{98000.0f};   // 980 hPa
+        int32_t tempHighLimit{350};
+        int32_t tempLowLimit{100};
+        uint32_t pressHighLimit{103000}; // 1030 hPa
+        uint32_t pressLowLimit{98000};   // 980 hPa
         
         Sys::AlarmState alarmState{Sys::AlarmState::NORMAL};
         uint8_t currentViewPage{0}; // 0: 温湿大屏, 1: 气压海拔
@@ -42,8 +42,8 @@ public:
     const TelemetryData& getTelemetry() const { return m_data; }
     
     // 允许修改报警限值（成员 B 通过屏幕交互操作）
-    void setTempLimits(float high, float low);
-    void setPressureLimits(float high, float low);
+    void setTempLimits(int32_t high, int32_t low);
+    void setPressureLimits(uint32_t high, uint32_t low);
 
 private:
     ITempHumSensor& m_th;

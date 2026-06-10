@@ -1,7 +1,7 @@
 // BSP/Src/Bmp280Bsp.cpp
 #include "Bmp280Bsp.hpp"
 #include "stm32f1xx_hal.h"
-#include <math.h>
+#include "MathTables.hpp"
 
 namespace Bsp {
 
@@ -81,41 +81,40 @@ Sys::Status Bmp280Bsp::loadCalibration()
     return Sys::Status::OK;
 }
 
-float Bmp280Bsp::compensateT(int32_t adcT)
+int32_t Bmp280Bsp::compensateT(int32_t adcT)
 {
-    double var1, var2, T;
-    var1 = (((double)adcT) / 16384.0 - ((double)m_calib.dig_T1) / 1024.0) * ((double)m_calib.dig_T2);
-    var2 = ((((double)adcT) / 131072.0 - ((double)m_calib.dig_T1) / 8192.0) *
-            (((double)adcT) / 131072.0 - ((double)m_calib.dig_T1) / 8192.0)) * ((double)m_calib.dig_T3);
-    
-    m_tFine = (int32_t)(var1 + var2);
-    T = (var1 + var2) / 5120.0;
-    return (float)T;
+    int32_t var1, var2, T;
+    var1 = ((((adcT >> 3) - ((int32_t)m_calib.dig_T1 << 1))) * ((int32_t)m_calib.dig_T2)) >> 11;
+    var2 = (((((adcT >> 4) - ((int32_t)m_calib.dig_T1)) * ((adcT >> 4) - ((int32_t)m_calib.dig_T1))) >> 12) * ((int32_t)m_calib.dig_T3)) >> 14;
+    m_tFine = var1 + var2;
+    T = (m_tFine * 5 + 128) >> 8;
+    return T; // resolution 0.01 DegC
 }
 
-float Bmp280Bsp::compensateP(int32_t adcP)
+uint32_t Bmp280Bsp::compensateP(int32_t adcP)
 {
-    double var1, var2, p;
-    var1 = ((double)m_tFine / 2.0) - 64000.0;
-    var2 = var1 * var1 * ((double)m_calib.dig_P6) / 32768.0;
-    var2 = var2 + var1 * ((double)m_calib.dig_P5) * 2.0;
-    var2 = (var2 / 4.0) + (((double)m_calib.dig_P4) * 65536.0);
-    var1 = (((double)m_calib.dig_P3) * var1 * var1 / 524288.0 + ((double)m_calib.dig_P2) * var1) / 524288.0;
-    var1 = (1.0 + var1 / 32768.0) * ((double)m_calib.dig_P1);
+    int64_t var1, var2, p;
+    var1 = ((int64_t)m_tFine) - 128000;
+    var2 = var1 * var1 * (int64_t)m_calib.dig_P6;
+    var2 = var2 + ((var1 * (int64_t)m_calib.dig_P5) << 17);
+    var2 = var2 + (((int64_t)m_calib.dig_P4) << 35);
+    var1 = ((var1 * var1 * (int64_t)m_calib.dig_P3) >> 8) + ((var1 * (int64_t)m_calib.dig_P2) << 12);
+    var1 = (((((int64_t)1) << 47) + var1)) * ((int64_t)m_calib.dig_P1) >> 33;
     
-    if (var1 == 0.0) {
-        return 0.0f; // 避免除以 0
+    if (var1 == 0) {
+        return 0; // avoid exception caused by division by zero
     }
     
-    p = 1048576.0 - (double)adcP;
-    p = (p - (var2 / 4096.0)) * 6250.0 / var1;
-    var1 = ((double)m_calib.dig_P9) * p * p / 2147483648.0;
-    var2 = p * ((double)m_calib.dig_P8) / 32768.0;
-    p = p + (var1 + var2 + ((double)m_calib.dig_P7)) / 16.0;
-    return (float)p;
+    p = 1048576 - adcP;
+    p = (((p << 31) - var2) * 3125) / var1;
+    var1 = (((int64_t)m_calib.dig_P9) * (p >> 13) * (p >> 13)) >> 25;
+    var2 = (((int64_t)m_calib.dig_P8) * p) >> 19;
+    p = ((p + var1 + var2) >> 8) + (((int64_t)m_calib.dig_P7) << 4);
+    
+    return (uint32_t)(p / 256); // Output in Pa
 }
 
-Sys::Status Bmp280Bsp::read(float& pressure, float& altitude)
+Sys::Status Bmp280Bsp::read(uint32_t& pressure, int32_t& altitude)
 {
     if (!m_initialized) {
         if (init() != Sys::Status::OK) return Sys::Status::ERROR_INIT;
@@ -132,16 +131,17 @@ Sys::Status Bmp280Bsp::read(float& pressure, float& altitude)
     int32_t rawT = ((int32_t)buffer[3] << 12) | ((int32_t)buffer[4] << 4) | ((int32_t)buffer[5] >> 4);
 
     // 首先计算出温度，因为气压的补偿参数强依赖于中间因子 m_tFine
+    // 注意：内部温度更新，但传感器并不向外暴露该温度（使用AHT20的温度）
     compensateT(rawT);
     
     // 物理气压换算 (单位为 Pa)
     pressure = compensateP(rawP);
 
-    // 海拔高度换算: H = 44330 * (1 - (P/101325)^0.190295)
-    if (pressure > 0.0f) {
-        altitude = 44330.0f * (1.0f - powf(pressure / 101325.0f, 0.190295f));
+    // 海拔高度换算: 查表法避免 powf
+    if (pressure > 0) {
+        altitude = calculateAltitudeX10(pressure);
     } else {
-        altitude = 0.0f;
+        altitude = 0;
     }
 
     return Sys::Status::OK;

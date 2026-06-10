@@ -21,30 +21,19 @@ static bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
     return true;
 }
 
-// 模拟浮点数转整型字符串方法（规避 --specs=nano.specs 下对 %f 的支持限制）
-static void formatFloat(char* dest, const char* prefix, float val, const char* suffix, int precision)
+// 定点数转整型字符串方法（规避对 %f 的支持限制）
+static void formatScaledInt(char* dest, const char* prefix, int32_t val, const char* suffix, int divisor)
 {
-    int intPart = static_cast<int>(val);
-    float diff = val - intPart;
-    if (diff < 0) diff = -diff;
+    int32_t absVal = val < 0 ? -val : val;
+    int32_t intPart = absVal / divisor;
+    int32_t fracPart = absVal % divisor;
     
-    int fracPart = 0;
-    if (precision == 1) {
-        fracPart = static_cast<int>(diff * 10.0f + 0.5f);
-        if (fracPart >= 10) {
-            fracPart = 0;
-            if (val >= 0) intPart++;
-            else intPart--;
-        }
-        sprintf(dest, "%s%d.%d%s", prefix, intPart, fracPart, suffix);
-    } else { // precision == 2
-        fracPart = static_cast<int>(diff * 100.0f + 0.5f);
-        if (fracPart >= 100) {
-            fracPart = 0;
-            if (val >= 0) intPart++;
-            else intPart--;
-        }
-        sprintf(dest, "%s%d.%02d%s", prefix, intPart, fracPart, suffix);
+    if (divisor == 10) {
+        sprintf(dest, "%s%s%ld.%ld%s", prefix, val < 0 ? "-" : "", (long)intPart, (long)fracPart, suffix);
+    } else if (divisor == 100) {
+        sprintf(dest, "%s%s%ld.%02ld%s", prefix, val < 0 ? "-" : "", (long)intPart, (long)fracPart, suffix);
+    } else {
+        sprintf(dest, "%s%ld%s", prefix, (long)val, suffix);
     }
 }
 
@@ -370,13 +359,14 @@ void LcdBsp::drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, ui
     }
 }
 
-void LcdBsp::drawFloat(uint16_t x, uint16_t y, float value,
-                       uint8_t intDigits, uint8_t fracDigits,
-                       uint16_t fc, uint16_t bc, uint8_t size)
+void LcdBsp::drawScaledInt(uint16_t x, uint16_t y, int32_t value,
+                           uint8_t intDigits, uint8_t fracDigits,
+                           uint16_t fc, uint16_t bc, uint8_t size)
 {
     char buf[20];
-    uint8_t totalWidth = intDigits + fracDigits + (fracDigits > 0 ? 1 : 0);
-    snprintf(buf, sizeof(buf), "%*.*f", totalWidth, fracDigits, static_cast<double>(value));
+    int divisor = 1;
+    for(int i=0; i<fracDigits; ++i) divisor *= 10;
+    formatScaledInt(buf, "", value, "", divisor);
     drawString(x, y, buf, fc, bc, size);
 }
 
@@ -436,29 +426,29 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
         }
         m_lastTempHumConn = data.tempHumConnected;
         // 重置缓存，确保传感器重新连接后立即刷新数值
-        m_lastTemp = -999.0f;
-        m_lastHum = -999.0f;
+        m_lastTemp = -9999;
+        m_lastHum = -9999;
     }
 
     if (data.tempHumConnected) {
         // --- 温度 ---
         if (forceRedraw || data.temperature != m_lastTemp) {
-            formatFloat(buf, "TEMP: ", data.temperature, " C", 2);
+            formatScaledInt(buf, "TEMP: ", data.temperature, " C", 10);
             drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastTemp = data.temperature;
         }
 
         if (forceRedraw) {
             char lowBuf[20], highBuf[20];
-            formatFloat(lowBuf, "", data.tempLowLimit, "", 1);
-            formatFloat(highBuf, "", data.tempHighLimit, "", 1);
+            formatScaledInt(lowBuf, "", data.tempLowLimit, "", 10);
+            formatScaledInt(highBuf, "", data.tempHighLimit, "", 10);
             sprintf(buf, "TEMP LIMIT: %s ~ %s C", lowBuf, highBuf);
             drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 湿度 ---
         if (forceRedraw || data.humidity != m_lastHum) {
-            formatFloat(buf, "HUMI: ", data.humidity, " %", 2);
+            formatScaledInt(buf, "HUMI: ", data.humidity, " %", 10);
             drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastHum = data.humidity;
         }
@@ -484,32 +474,32 @@ void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool
         }
         m_lastPressConn = data.pressureConnected;
         // 重置缓存，确保传感器重新连接后立即刷新数值
-        m_lastPress = -999.0f;
-        m_lastAlt = -999.0f;
+        m_lastPress = 0;
+        m_lastAlt = -9999;
     }
 
     if (data.pressureConnected) {
         // --- 大气压强 ---
         if (forceRedraw || data.pressure != m_lastPress) {
-            formatFloat(buf, "PRES: ", data.pressure, " Pa", 1);
+            sprintf(buf, "PRES: %lu Pa", (unsigned long)data.pressure);
             drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
             m_lastPress = data.pressure;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "PRES LIMIT: %d ~ %d Pa", static_cast<int>(data.pressLowLimit), static_cast<int>(data.pressHighLimit));
+            sprintf(buf, "PRES LIMIT: %lu ~ %lu Pa", (unsigned long)data.pressLowLimit, (unsigned long)data.pressHighLimit);
             drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
         }
 
         // --- 海拔 ---
         if (forceRedraw || data.altitude != m_lastAlt) {
-            formatFloat(buf, "ALTI: ", data.altitude, " m", 2);
+            formatScaledInt(buf, "ALTI: ", data.altitude, " m", 10);
             drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
             m_lastAlt = data.altitude;
         }
 
         if (forceRedraw) {
-            drawCenteredString(180, "ALTI CALC: Barometric Formula", kColorGray, kColorBlack, 16);
+            drawCenteredString(180, "ALTI CALC: LUT Int32", kColorGray, kColorBlack, 16);
         }
     }
 }

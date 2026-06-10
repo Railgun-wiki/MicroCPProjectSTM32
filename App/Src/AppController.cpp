@@ -1,5 +1,6 @@
 // App/Src/AppController.cpp
 #include "AppController.hpp"
+#include <stdlib.h>
 
 namespace App {
 
@@ -81,7 +82,7 @@ void AppController::run()
 
 void AppController::updateTelemetry()
 {
-    float temp{0.0f}, hum{0.0f};
+    int32_t temp{0}, hum{0};
     if (m_th.read(temp, hum) == Sys::Status::OK) {
         m_data.temperature = temp;
         m_data.humidity = hum;
@@ -91,7 +92,7 @@ void AppController::updateTelemetry()
         SYS_LOG("Error: Failed to read temperature and humidity.");
     }
 
-    float press{0.0f}, alt{0.0f};
+    uint32_t press{0}; int32_t alt{0};
     if (m_press.read(press, alt) == Sys::Status::OK) {
         m_data.pressure = press;
         m_data.altitude = alt;
@@ -169,29 +170,31 @@ void AppController::updateStateMachine()
         if (m_data.alarmState != Sys::AlarmState::WARNING_TEMP) {
             m_data.alarmState = Sys::AlarmState::WARNING_TEMP;
             m_led.setWarningBlinking();
-            SYS_LOG("Alarm Triggered: Temperature abnormal! Temp: %.2f C", m_data.temperature);
+            SYS_LOG("Alarm Triggered: Temperature abnormal! Temp: %ld.%ld C", (long)(m_data.temperature / 10), (long)abs(m_data.temperature % 10));
         }
     } else if (pressAbnormal) {
         if (m_data.alarmState != Sys::AlarmState::WARNING_PRES) {
             m_data.alarmState = Sys::AlarmState::WARNING_PRES;
             m_led.setWarningBlinking();
-            SYS_LOG("Alarm Triggered: Atmospheric pressure abnormal! Press: %.2f Pa", m_data.pressure);
+            SYS_LOG("Alarm Triggered: Atmospheric pressure abnormal! Press: %lu Pa", (unsigned long)m_data.pressure);
         }
     }
 }
 
-void AppController::setTempLimits(float high, float low)
+void AppController::setTempLimits(int32_t high, int32_t low)
 {
     m_data.tempHighLimit = high;
     m_data.tempLowLimit = low;
-    SYS_LOG("Updated Temperature limits: High: %.1f C, Low: %.1f C", high, low);
+    SYS_LOG("Updated Temperature limits: High: %ld.%ld C, Low: %ld.%ld C", 
+            (long)(high / 10), (long)abs(high % 10), 
+            (long)(low / 10), (long)abs(low % 10));
 }
 
-void AppController::setPressureLimits(float high, float low)
+void AppController::setPressureLimits(uint32_t high, uint32_t low)
 {
     m_data.pressHighLimit = high;
     m_data.pressLowLimit = low;
-    SYS_LOG("Updated Pressure limits: High: %.1f Pa, Low: %.1f Pa", high, low);
+    SYS_LOG("Updated Pressure limits: High: %lu Pa, Low: %lu Pa", (unsigned long)high, (unsigned long)low);
 }
 
 } // namespace App
