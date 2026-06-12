@@ -63,6 +63,12 @@ void Error_Handler(void);
 #define TOUCH_PEN_GPIO_Port GPIOA
 #define TOUCH_DOUT_Pin GPIO_PIN_1
 #define TOUCH_DOUT_GPIO_Port GPIOA
+#define KEY_PAGE_Pin GPIO_PIN_2
+#define KEY_PAGE_GPIO_Port GPIOA
+#define KEY_CONFIRM_Pin GPIO_PIN_3
+#define KEY_CONFIRM_GPIO_Port GPIOA
+#define KEY_BACK_Pin GPIO_PIN_4
+#define KEY_BACK_GPIO_Port GPIOA
 #define TOUCH_TCLK_Pin GPIO_PIN_8
 #define TOUCH_TCLK_GPIO_Port GPIOA
 #define TOUCH_TDIN_Pin GPIO_PIN_3

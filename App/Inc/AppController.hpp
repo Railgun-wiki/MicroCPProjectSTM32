@@ -13,7 +13,7 @@ namespace App {
 class AppController {
 public:
     // 依赖注入：在构造时引入所有解耦后的虚接口引用，彻底隔绝底层硬件实现
-    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd, ITouch& touch);
+    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, ILcdDisplay& lcd, ITouch& touch);
     
     // 初始化应用控制器，复位状态机与传感器参数
     void setup();
@@ -35,7 +35,7 @@ public:
         
         Sys::AlarmState alarmState{Sys::AlarmState::NORMAL};
         uint8_t currentViewPage{0}; // 0: 温湿大屏, 1: 气压海拔
-        bool isMuted{false};
+        bool isMuted{false}; // 当前用于表示“告警展示已被确认/抑制”
     };
 
     // 获取全局遥测结构体实例 (由外部线程安全地只读)
@@ -50,7 +50,8 @@ private:
     IPressureSensor& m_press;
     IIndicator& m_led;
     IButton& m_keyPage;
-    IButton& m_keyMute;
+    IButton& m_keyConfirm;
+    IButton& m_keyBack;
     ILcdDisplay& m_lcd;
     ITouch& m_touch;
 

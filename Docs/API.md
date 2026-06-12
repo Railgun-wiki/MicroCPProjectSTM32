@@ -150,12 +150,15 @@ classDiagram
 - `bool isPressed()`
 - `void scanTick()`
 
-接口仍保留在 `AppController` 中，用于表达逻辑上的页切换和静音输入。
+接口用于表达物理按键输入，当前工程已落地为页切换、确认和返回三个基础交互。
 
 当前工程状态：
 
-- 没有绑定物理 `ButtonBsp`
-- `app_entry.cpp` 中通过 `NullButton` 注入两个 `IButton` 依赖
+- 已绑定物理 `ButtonBsp`
+- `app_entry.cpp` 中注入了 3 个真实按键：
+  - `KEY_PAGE` (`PA2`, 对应底板 `S0`)
+  - `KEY_CONFIRM` (`PA3`, 对应底板 `S2`)
+  - `KEY_BACK` (`PA4`, 对应底板 `S3`)
 - `scanTick()` 仍在 `App_Timer_10ms_ISR()` 中被调用，保持接口契约一致
 
 ### `ITouch` 与 `TouchPoint`
@@ -214,7 +217,8 @@ AppController(ITempHumSensor& th,
               IPressureSensor& press,
               IIndicator& led,
               IButton& keyPage,
-              IButton& keyMute,
+              IButton& keyConfirm,
+              IButton& keyBack,
               ILcdDisplay& lcd,
               ITouch& touch);
 ```
@@ -224,14 +228,15 @@ AppController(ITempHumSensor& th,
 - 初始化 LCD、温湿度传感器、气压传感器和指示灯
 - 周期性采集温湿度、气压和海拔
 - 根据阈值更新报警状态与指示灯模式
-- 处理触摸翻页
-- 保留逻辑按钮输入通道，但当前由 `NullButton` 占位
+- 处理触摸翻页和 3 个物理按键输入
 - 将遥测与状态打包为 `ILcdDisplay::RenderData`，交由显示层刷新
 
 当前交互行为：
 
+- `KEY_PAGE`：切换页面
+- `KEY_CONFIRM`：确认/抑制当前告警展示
+- `KEY_BACK`：返回默认页面，并在已确认状态下恢复告警展示
 - 触摸点击右半屏切页
-- 物理按钮路径保留在接口层，但在当前硬件映射下不生效
 
 ## BSP 层接口与实现
 
@@ -303,7 +308,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 - 当前由 `TIM3_CH3` 驱动
 - 正常状态为呼吸灯
-- 报警和静音状态下保持高频闪烁警示
+- 报警和已确认状态下保持高频闪烁警示
 
 ### `ButtonBsp`
 
@@ -311,9 +316,9 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 说明：
 
-- 仓库中仍保留物理按键实现
-- 当前工程未在 `app_entry.cpp` 中实例化或注入
-- 若未来恢复物理按键，需要先释放触摸占用的 `PA0/PA1` 或改用其他 GPIO
+- 当前工程已实例化并注入 3 个物理按键
+- 当前引脚为 `PA2` / `PA3` / `PA4`
+- 按键按低电平视为有效按下，使用 20ms 消抖
 
 ### `LcdBsp`
 
@@ -356,13 +361,14 @@ static Bsp::HardwareI2cBsp g_I2cBus(&hi2c2);
 static Bsp::Aht20Bsp  g_Aht20(g_I2cBus);
 static Bsp::Bmp280Bsp g_Bmp280(g_I2cBus);
 static Bsp::PwmLedBsp g_LedIndicator(&htim3, TIM_CHANNEL_3);
-static NullButton g_KeyPage;
-static NullButton g_KeyMute;
+static Bsp::ButtonBsp g_KeyPage(KEY_PAGE_GPIO_Port, KEY_PAGE_Pin);
+static Bsp::ButtonBsp g_KeyConfirm(KEY_CONFIRM_GPIO_Port, KEY_CONFIRM_Pin);
+static Bsp::ButtonBsp g_KeyBack(KEY_BACK_GPIO_Port, KEY_BACK_Pin);
 static Bsp::LcdBsp g_Lcd(...);
 static Bsp::TouchBsp g_Touch(...);
 static Bsp::GuiEngine g_Gui(g_Lcd);
 static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
-                                g_KeyPage, g_KeyMute, g_Lcd, g_Touch);
+                                g_KeyPage, g_KeyConfirm, g_KeyBack, g_Lcd, g_Touch);
 ```
 
 初始化顺序：

@@ -4,12 +4,13 @@
 
 namespace App {
 
-AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyMute, ILcdDisplay& lcd, ITouch& touch)
+AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, ILcdDisplay& lcd, ITouch& touch)
     : m_th(th)
     , m_press(press)
     , m_led(led)
     , m_keyPage(keyPage)
-    , m_keyMute(keyMute)
+    , m_keyConfirm(keyConfirm)
+    , m_keyBack(keyBack)
     , m_lcd(lcd)
     , m_touch(touch)
 {
@@ -55,7 +56,7 @@ void AppController::run()
     // 1. 采集最新的传感器物理数据
     updateTelemetry();
     
-    // 2. 检查按键输入执行切屏与消音翻转
+    // 2. 检查按键输入执行切屏与基础交互
     handleInteractions();
     
     // 3. 执行状态机并更新系统指标
@@ -105,8 +106,8 @@ void AppController::updateTelemetry()
 
 void AppController::handleInteractions()
 {
-    // KEY1 用于切换 LCD 显示页 (0: 温湿屏, 1: 气压海拔屏)
-    // Optional logical page button input. In the current hardware mapping this is a null button.
+    // KEY1 用于切换 LCD 显示页 (0: 温湿屏, 1: 气压海拔屏)。
+    // 当前硬件映射中，该输入由底板 S0 经 FPGA 回送到 STM32 的 KEY_PAGE。
     if (m_keyPage.isPressed()) {
         m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
         SYS_LOG("Page button pressed. Switched LCD to page %d", m_data.currentViewPage);
@@ -124,18 +125,31 @@ void AppController::handleInteractions()
         }
     }
 
-    // KEY2 用于报警状态下的静音消音操作
-    // Optional logical mute button input. In the current hardware mapping this is a null button.
-    if (m_keyMute.isPressed()) {
+    // KEY2 用于确认/抑制当前报警状态，不再代表声音相关的静音硬件。
+    if (m_keyConfirm.isPressed()) {
         if (m_data.alarmState == Sys::AlarmState::WARNING_TEMP || 
             m_data.alarmState == Sys::AlarmState::WARNING_PRES) {
             m_data.isMuted = true;
             m_data.alarmState = Sys::AlarmState::MUTED;
-            SYS_LOG("Mute button pressed. Alarm is muted.");
+            SYS_LOG("Confirm button pressed. Alarm indication suppressed.");
         } else if (m_data.alarmState == Sys::AlarmState::MUTED) {
             m_data.isMuted = false;
-            // 重新进入异常状态以重新判定
-            SYS_LOG("Mute button pressed. Alarm unmuted.");
+            SYS_LOG("Confirm button pressed. Alarm indication restored.");
+        }
+    }
+
+    // KEY3 用于返回默认页面，并在已确认状态下允许恢复到未确认的告警展示。
+    if (m_keyBack.isPressed()) {
+        const bool pageChanged = (m_data.currentViewPage != 0);
+        m_data.currentViewPage = 0;
+
+        if (m_data.alarmState == Sys::AlarmState::MUTED) {
+            m_data.isMuted = false;
+            SYS_LOG("Back button pressed. Returned to page 0 and restored alarm indication.");
+        } else if (pageChanged) {
+            SYS_LOG("Back button pressed. Returned to page 0.");
+        } else {
+            SYS_LOG("Back button pressed.");
         }
     }
 }
@@ -146,7 +160,7 @@ void AppController::updateStateMachine()
     bool tempAbnormal = (m_data.temperature > m_data.tempHighLimit) || (m_data.temperature < m_data.tempLowLimit);
     bool pressAbnormal = (m_data.pressure > m_data.pressHighLimit) || (m_data.pressure < m_data.pressLowLimit);
 
-    // 状态自愈：若当前没有任何异常，重置状态为正常，并解除静音
+    // 状态自愈：若当前没有任何异常，重置状态为正常，并解除已确认状态
     if (!tempAbnormal && !pressAbnormal) {
         if (m_data.alarmState != Sys::AlarmState::NORMAL) {
             m_data.alarmState = Sys::AlarmState::NORMAL;
@@ -157,10 +171,10 @@ void AppController::updateStateMachine()
         return;
     }
 
-    // 若已经处于静音状态，保持静音状态，除非环境恢复正常（上面已处理）
+    // 若已经处于已确认状态，保持抑制展示状态，除非环境恢复正常（上面已处理）
     if (m_data.isMuted) {
         m_data.alarmState = Sys::AlarmState::MUTED;
-        // 在静音状态下，LED 仍然需要保持 5Hz 高频爆闪作为安全警示
+        // 在已确认状态下，LED 仍然保持高频闪烁作为无声安全警示。
         m_led.setWarningBlinking();
         return;
     }

@@ -14,8 +14,8 @@
 - 当前运行链路：`AppController` -> `Aht20Bsp` / `Bmp280Bsp` / `LcdBsp` / `TouchBsp`
 - 当前传感器总线：`HardwareI2cBsp` + `I2C2` (`PB10` / `PB11`)
 - 当前显示链路：`SPI1` + `LcdBsp` + `GuiEngine`
-- 当前输入模型：触摸屏为主输入；`PA0` / `PA1` 已用于触摸，不绑定物理 `ButtonBsp`
-- 当前按钮注入：`app_entry.cpp` 中使用 `NullButton` 满足 `AppController` 的抽象依赖
+- 当前状态灯：`PB0 / TIM3_CH3` 驱动物理状态 LED，正常呼吸、异常闪烁
+- 当前输入模型：触摸屏 + 3 个物理按键；`PA0` / `PA1` 仍专用于触摸
 
 ## 文档清单
 
@@ -56,6 +56,9 @@
 | `I2C2_SCL` | `PB10` | AHT20 / BMP280 共用硬件 I2C |
 | `I2C2_SDA` | `PB11` | AHT20 / BMP280 共用硬件 I2C |
 | `TIM3_CH3` | `PB0` | `PwmLedBsp` 使用的 PWM 指示灯输出 |
+| `KEY_PAGE` | `PA2` | 物理按键输入，对应底板 `S0` |
+| `KEY_CONFIRM` | `PA3` | 物理按键输入，对应底板 `S2` |
+| `KEY_BACK` | `PA4` | 物理按键输入，对应底板 `S3` |
 | `USART1_TX/RX` | `PA9` / `PA10` | 调试日志串口 |
 
 ## 当前软件结构
@@ -74,15 +77,17 @@ graph TD
     AppCtl --> TempHum["Aht20Bsp"]
     AppCtl --> Pressure["Bmp280Bsp"]
     AppCtl --> Indicator["PwmLedBsp"]
-    AppCtl --> PageBtn["NullButton : IButton"]
-    AppCtl --> MuteBtn["NullButton : IButton"]
+    AppCtl --> PageBtn["ButtonBsp : KEY_PAGE"]
+    AppCtl --> ConfirmBtn["ButtonBsp : KEY_CONFIRM"]
+    AppCtl --> BackBtn["ButtonBsp : KEY_BACK"]
     AppCtl --> Display["ILcdDisplay / LcdBsp"]
     AppCtl --> TouchIf["ITouch / TouchBsp"]
 
     AppLoop --> AppCtl
     TimerISR --> Indicator
     TimerISR --> PageBtn
-    TimerISR --> MuteBtn
+    TimerISR --> ConfirmBtn
+    TimerISR --> BackBtn
 ```
 
 ## 构建方式

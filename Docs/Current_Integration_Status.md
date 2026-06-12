@@ -18,12 +18,18 @@
   - `PB7` -> `LCD_DC`
   - `PB8` -> `LCD_RST`
   - `PB5` -> `LCD_CS`
+- 状态灯引脚：
+  - `PB0` -> `TIM3_CH3` -> 状态指示 LED（正常呼吸 / 异常闪烁）
 - 触摸引脚：
   - `PA0` -> `TOUCH_PEN`
   - `PA1` -> `TOUCH_DOUT`
   - `PA8` -> `TOUCH_TCLK`
   - `PB3` -> `TOUCH_TDIN`
   - `PB4` -> `TOUCH_TCS`
+- 物理按键引脚：
+  - `PA2` -> `KEY_PAGE`（底板 `S0`）
+  - `PA3` -> `KEY_CONFIRM`（底板 `S2`）
+  - `PA4` -> `KEY_BACK`（底板 `S3`）
 - 传感器总线：
   - `PB10` -> `I2C2_SCL`
   - `PB11` -> `I2C2_SDA`
@@ -39,8 +45,11 @@
 ## 输入模型
 
 - `PA0/PA1` 为触摸专用引脚，不得再绑定到 `ButtonBsp`
-- `AppController` 仍保留抽象的页切换/静音按钮依赖，但当前工程注入的是 null button
-- 当前页面切换能力来自触摸输入：点击右半屏切页
+- 当前工程注入了 3 个真实物理按键：
+  - `KEY_PAGE`：切页
+  - `KEY_CONFIRM`：确认/抑制当前告警展示
+  - `KEY_BACK`：返回默认页并恢复告警展示
+- 触摸输入仍保留：点击右半屏可切页
 
 ## 调试与重映射要求
 
@@ -54,5 +63,6 @@
 
 - `HAL_DMA_MODULE_ENABLED` 已开启
 - `SPI1` 的 RX/TX DMA 仍连接 `DMA1_Channel2` / `DMA1_Channel3`
-- `TOUCH_PEN` 与 `TOUCH_DOUT` 仍为上拉输入
+- `TOUCH_PEN`、`TOUCH_DOUT`、`KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK` 仍为上拉输入
 - LCD/触摸输出引脚仍为高速输出，且默认电平符合当前设计
+- `PB0` 仍保持 `TIM3_CH3` 供 `PwmLedBsp` 使用

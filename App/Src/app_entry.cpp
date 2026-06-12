@@ -6,7 +6,7 @@
 #include "Aht20Bsp.hpp"
 #include "Bmp280Bsp.hpp"
 #include "PwmLedBsp.hpp"
-#include "IButton.hpp"
+#include "ButtonBsp.hpp"
 #include "LcdBsp.hpp"
 #include "GuiEngine.hpp"
 #include "TouchBsp.hpp"
@@ -19,16 +19,6 @@ extern TIM_HandleTypeDef htim3;
 extern SPI_HandleTypeDef hspi1;
 extern I2C_HandleTypeDef hi2c2;
 
-namespace {
-
-class NullButton final : public App::IButton {
-public:
-    bool isPressed() override { return false; }
-    void scanTick() {}
-};
-
-} // namespace
-
 static Bsp::HardwareI2cBsp g_I2cBus(&hi2c2);
 
 static Bsp::Aht20Bsp  g_Aht20(g_I2cBus);
@@ -36,9 +26,9 @@ static Bsp::Bmp280Bsp g_Bmp280(g_I2cBus);
 
 static Bsp::PwmLedBsp g_LedIndicator(&htim3, TIM_CHANNEL_3);
 
-// PA0/PA1 belong to the resistive touch panel, so no physical keys are bound here.
-static NullButton g_KeyPage;
-static NullButton g_KeyMute;
+static Bsp::ButtonBsp g_KeyPage(KEY_PAGE_GPIO_Port, KEY_PAGE_Pin);
+static Bsp::ButtonBsp g_KeyConfirm(KEY_CONFIRM_GPIO_Port, KEY_CONFIRM_Pin);
+static Bsp::ButtonBsp g_KeyBack(KEY_BACK_GPIO_Port, KEY_BACK_Pin);
 
 static Bsp::LcdBsp g_Lcd(&hspi1,
                          LCD_CS_GPIO_Port,  LCD_CS_Pin,
@@ -54,7 +44,7 @@ static Bsp::TouchBsp g_Touch(TOUCH_TCLK_GPIO_Port, TOUCH_TCLK_Pin,
 
 static Bsp::GuiEngine g_Gui(g_Lcd);
 static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
-                                g_KeyPage, g_KeyMute, g_Lcd, g_Touch);
+                                g_KeyPage, g_KeyConfirm, g_KeyBack, g_Lcd, g_Touch);
 
 void App_Init(void)
 {
@@ -99,5 +89,6 @@ void App_Timer_10ms_ISR(void)
 {
     g_LedIndicator.updatePhysics(10);
     g_KeyPage.scanTick();
-    g_KeyMute.scanTick();
+    g_KeyConfirm.scanTick();
+    g_KeyBack.scanTick();
 }

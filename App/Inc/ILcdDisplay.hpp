@@ -61,7 +61,7 @@ public:
 
         Sys::AlarmState alarmState; ///< 系统当前的报警状态
         uint8_t currentViewPage;  ///< 当前活动的分页页码 (0 或 1)
-        bool isMuted;             ///< 警报是否已静音
+        bool isMuted;             ///< 告警展示是否已被确认/抑制
 
         bool tempHumConnected;    ///< 温湿度传感器是否已连接
         bool pressureConnected;   ///< 气压传感器是否已连接

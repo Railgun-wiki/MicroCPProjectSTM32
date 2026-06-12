@@ -120,7 +120,7 @@ graph TD
 
 - 当前工程里 `II2cBus` 是总线抽象，`HardwareI2cBsp` 是默认实现
 - `SoftI2cBsp` 是备选实现，不应在规范文档中被描述为当前默认链路
-- `IButton` 仍是业务抽象的一部分，但当前工程运行时注入的是 `NullButton`
+- `IButton` 仍是业务抽象的一部分，当前工程运行时注入的是 3 个物理 `ButtonBsp`
 
 ## 生命周期与内存规范
 
@@ -154,5 +154,6 @@ graph TD
 
 - “默认传感器总线是 `SoftI2cBsp`”
 - “`PA0/PA1` 绑定物理页切换/静音按键”
+- “当前工程仍通过 `NullButton` 占位物理按键输入”
 - “旧 toolchain 文件 `cmake/stm32_gcc.cmake` 是当前构建入口”
 - “规范示例中的伪代码可直接代表当前接线或当前对象装配”
