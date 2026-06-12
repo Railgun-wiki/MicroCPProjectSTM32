@@ -87,8 +87,36 @@ void App_Loop(void)
 
 void App_Timer_10ms_ISR(void)
 {
+    static uint32_t debugTicks = 0;
+    static GPIO_PinState lastPageState = GPIO_PIN_SET;
+    static GPIO_PinState lastConfirmState = GPIO_PIN_SET;
+    static GPIO_PinState lastBackState = GPIO_PIN_SET;
+
     g_LedIndicator.updatePhysics(10);
     g_KeyPage.scanTick();
     g_KeyConfirm.scanTick();
     g_KeyBack.scanTick();
+
+    const GPIO_PinState pageState = HAL_GPIO_ReadPin(KEY_PAGE_GPIO_Port, KEY_PAGE_Pin);
+    const GPIO_PinState confirmState = HAL_GPIO_ReadPin(KEY_CONFIRM_GPIO_Port, KEY_CONFIRM_Pin);
+    const GPIO_PinState backState = HAL_GPIO_ReadPin(KEY_BACK_GPIO_Port, KEY_BACK_Pin);
+
+    if (pageState != lastPageState || confirmState != lastConfirmState || backState != lastBackState) {
+        SYS_LOG("Key raw state changed: PAGE=%d CONFIRM=%d BACK=%d",
+                pageState == GPIO_PIN_SET ? 1 : 0,
+                confirmState == GPIO_PIN_SET ? 1 : 0,
+                backState == GPIO_PIN_SET ? 1 : 0);
+        lastPageState = pageState;
+        lastConfirmState = confirmState;
+        lastBackState = backState;
+    }
+
+    debugTicks++;
+    if (debugTicks >= 100) {
+        debugTicks = 0;
+        SYS_LOG("Heartbeat: PAGE=%d CONFIRM=%d BACK=%d",
+                pageState == GPIO_PIN_SET ? 1 : 0,
+                confirmState == GPIO_PIN_SET ? 1 : 0,
+                backState == GPIO_PIN_SET ? 1 : 0);
+    }
 }
