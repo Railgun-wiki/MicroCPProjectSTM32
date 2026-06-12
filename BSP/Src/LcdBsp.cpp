@@ -396,8 +396,11 @@ void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
 
     // 1. 渲染头部栏
     if (forceRedraw) {
-        drawString(20, 15, "Hello World!", kColorYellow, kColorBlack, 16);
+        char headerBuf[32];
+        drawString(20, 15, "MicroCP Sensor Monitor", kColorYellow, kColorBlack, 16);
         drawString(20, 35, "--------------------------------", kColorGray, kColorBlack, 16);
+        sprintf(headerBuf, "GROUP: %lu", (unsigned long)SYS_GROUP_NUMBER);
+        drawString(250, 15, headerBuf, kColorGreen, kColorBlack, 16);
     }
 
     // 2. 根据不同的调试页面，渲染核心环境传感器状态
@@ -549,7 +552,7 @@ void LcdBsp::renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, boo
     // --- 渲染页面页码栏 ---
     if (forceRedraw) {
         sprintf(buf, "PAGE: %d/2", data.currentViewPage + 1);
-        drawString(350, 15, buf, kColorYellow, kColorBlack, 16);
+        drawString(390, 15, buf, kColorYellow, kColorBlack, 16);
     }
 }
 

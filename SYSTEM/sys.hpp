@@ -11,7 +11,10 @@
 #define SYS_I2C_ADDR_AHT20      0x38U
 #define SYS_I2C_ADDR_BMP280     0x76U
 
-// 3. 调试输出日志开关
+// 3. 项目组号显示配置
+#define SYS_GROUP_NUMBER        0U
+
+// 4. 调试输出日志开关
 #define SYS_DEBUG_ENABLED       1
 
 #if SYS_DEBUG_ENABLED
@@ -21,7 +24,7 @@
     #define SYS_LOG(format, ...) ((void)0)
 #endif
 
-// 4. 全局核心命名空间与通用枚举
+// 5. 全局核心命名空间与通用枚举
 namespace Sys {
 
 // 系统底层通信或自检错误代码

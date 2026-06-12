@@ -13,7 +13,6 @@
 #include "AppController.hpp"
 
 #include <stdio.h>
-#include <string.h>
 
 extern TIM_HandleTypeDef htim3;
 extern SPI_HandleTypeDef hspi1;
@@ -57,22 +56,29 @@ void App_Init(void)
     // Diagnostic I2C scanner on boot
     g_Lcd.init();
     g_Lcd.clear(0x0000); // Clear to Black
-    g_Lcd.drawString(20, 50, "Scanning I2C2 Bus...", 0xFFFF, 0x0000, 16);
-    
-    char scanBuf[128] = "Devices: ";
-    int count = 0;
+    g_Lcd.drawString(20, 30, "MicroCP Sensor Monitor", 0xFFE0, 0x0000, 16);
+    g_Lcd.drawString(20, 55, "Scanning I2C2 Bus...", 0xFFFF, 0x0000, 16);
+
+    bool aht20Connected = false;
+    bool bmp280Connected = false;
     for (uint16_t i = 1; i < 128; i++) {
         if (HAL_I2C_IsDeviceReady(&hi2c2, i << 1, 1, 10) == HAL_OK) {
-            char addrBuf[12];
-            sprintf(addrBuf, "0x%02X ", i);
-            strcat(scanBuf, addrBuf);
-            count++;
+            if (i == SYS_I2C_ADDR_AHT20) {
+                aht20Connected = true;
+            }
+            if (i == SYS_I2C_ADDR_BMP280) {
+                bmp280Connected = true;
+            }
         }
     }
-    if (count == 0) {
-        strcat(scanBuf, "None");
-    }
-    g_Lcd.drawString(20, 80, scanBuf, 0xFFE0, 0x0000, 16);
+
+    char lineBuf[48];
+    sprintf(lineBuf, "GROUP: %lu", (unsigned long)SYS_GROUP_NUMBER);
+    g_Lcd.drawString(20, 85, lineBuf, 0x07E0, 0x0000, 16);
+    sprintf(lineBuf, "AHT20: %s", aht20Connected ? "Connected" : "Unconnected");
+    g_Lcd.drawString(20, 120, lineBuf, aht20Connected ? 0x07E0 : 0xF800, 0x0000, 16);
+    sprintf(lineBuf, "BMP280: %s", bmp280Connected ? "Connected" : "Unconnected");
+    g_Lcd.drawString(20, 150, lineBuf, bmp280Connected ? 0x07E0 : 0xF800, 0x0000, 16);
     HAL_Delay(2000); // Show for 2 seconds
 
     g_App.setup();
