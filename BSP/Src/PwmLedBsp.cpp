@@ -4,6 +4,33 @@
 
 namespace Bsp {
 
+namespace {
+
+constexpr uint32_t kLutMax = 945;
+constexpr uint32_t kBlinkOnPercent = 95;
+
+uint32_t scaleToTimerPeriod(const TIM_HandleTypeDef* htim, uint32_t value, uint32_t valueMax)
+{
+    if (htim == nullptr || valueMax == 0) {
+        return 0;
+    }
+
+    const uint32_t period = __HAL_TIM_GET_AUTORELOAD(htim);
+    return (period * value) / valueMax;
+}
+
+uint32_t scalePercentToTimerPeriod(const TIM_HandleTypeDef* htim, uint32_t percent)
+{
+    if (htim == nullptr) {
+        return 0;
+    }
+
+    const uint32_t period = __HAL_TIM_GET_AUTORELOAD(htim);
+    return (period * percent) / 100U;
+}
+
+} // namespace
+
 PwmLedBsp::PwmLedBsp(TIM_HandleTypeDef* htim, uint32_t channel)
     : m_htim(htim)
     , m_channel(channel)
@@ -43,7 +70,7 @@ void PwmLedBsp::updatePhysics(uint32_t elapsedMs)
         uint32_t index = (phase * 64) / 2000;
         if (index >= 64) index = 63;
         
-        uint32_t duty = PWM_SINE_LUT[index];
+        const uint32_t duty = scaleToTimerPeriod(m_htim, PWM_SINE_LUT[index], kLutMax);
         
         __HAL_TIM_SET_COMPARE(m_htim, m_channel, duty);
     } 
@@ -52,7 +79,9 @@ void PwmLedBsp::updatePhysics(uint32_t elapsedMs)
         if (m_timeAcc >= 100) {
             m_timeAcc = 0;
             m_blinkState = !m_blinkState;
-            __HAL_TIM_SET_COMPARE(m_htim, m_channel, m_blinkState ? 999 : 0);
+            __HAL_TIM_SET_COMPARE(m_htim,
+                                  m_channel,
+                                  m_blinkState ? scalePercentToTimerPeriod(m_htim, kBlinkOnPercent) : 0);
         }
     }
 }
