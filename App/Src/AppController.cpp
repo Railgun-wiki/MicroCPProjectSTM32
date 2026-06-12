@@ -51,6 +51,7 @@ void AppController::setup()
     m_data.currentViewPage = 0;
     m_data.isMuted = false;
     m_touchToggleRequested = false;
+    m_touchObservedPressed = false;
     m_tempHumSampleActive = false;
 }
 
@@ -143,14 +144,23 @@ void AppController::stepSensors(uint32_t nowMs)
 
 void AppController::pollTouch()
 {
-    if (!m_touch.isTouched()) {
+    const bool touched = m_touch.isTouched();
+    if (touched) {
+        m_touchObservedPressed = true;
         return;
     }
 
-    App::TouchPoint pt;
-    if (m_touch.readPosition(pt) && pt.valid && pt.x > 240U) {
+    if (m_touchObservedPressed && !m_touchToggleRequested) {
+        m_touchObservedPressed = false;
         m_touchToggleRequested = true;
+        SYS_LOG("Touch poll fallback: release detected.");
     }
+}
+
+void AppController::requestTouchToggle()
+{
+    m_touchObservedPressed = false;
+    m_touchToggleRequested = true;
 }
 
 void AppController::processInputs()
@@ -165,7 +175,7 @@ void AppController::processInputs()
     if (m_touchToggleRequested) {
         m_touchToggleRequested = false;
         m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
-        SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
+        SYS_LOG("Touch release: switched to page %d", m_data.currentViewPage);
     }
 
     // KEY2 用于确认/抑制当前报警状态，不再代表声音相关的静音硬件。

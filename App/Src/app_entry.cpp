@@ -51,6 +51,7 @@ struct AppTaskFlags {
     volatile uint8_t ledUpdate{0};
     volatile uint8_t keyScan{0};
     volatile uint8_t inputProcess{0};
+    volatile uint8_t touchEvent{0};
     volatile uint8_t touchPoll{0};
     volatile uint8_t sensorStart{0};
     volatile uint8_t sensorStep{0};
@@ -63,6 +64,7 @@ struct AppTaskSnapshot {
     uint8_t ledUpdate;
     uint8_t keyScan;
     uint8_t inputProcess;
+    uint8_t touchEvent;
     uint8_t touchPoll;
     uint8_t sensorStart;
     uint8_t sensorStep;
@@ -72,6 +74,7 @@ struct AppTaskSnapshot {
 };
 
 AppTaskFlags g_taskFlags;
+volatile uint8_t g_touchIrqPending = 0;
 
 } // namespace
 
@@ -123,11 +126,12 @@ void App_Init(void)
 
 void App_Loop(void)
 {
-    AppTaskSnapshot snapshot{0, 0, 0, 0, 0, 0, 0, 0, 0};
+    AppTaskSnapshot snapshot{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     Sys::EnterCritical();
     snapshot.ledUpdate = g_taskFlags.ledUpdate;
     snapshot.keyScan = g_taskFlags.keyScan;
     snapshot.inputProcess = g_taskFlags.inputProcess;
+    snapshot.touchEvent = g_taskFlags.touchEvent;
     snapshot.touchPoll = g_taskFlags.touchPoll;
     snapshot.sensorStart = g_taskFlags.sensorStart;
     snapshot.sensorStep = g_taskFlags.sensorStep;
@@ -138,6 +142,7 @@ void App_Loop(void)
     g_taskFlags.ledUpdate = 0;
     g_taskFlags.keyScan = 0;
     g_taskFlags.inputProcess = 0;
+    g_taskFlags.touchEvent = 0;
     g_taskFlags.touchPoll = 0;
     g_taskFlags.sensorStart = 0;
     g_taskFlags.sensorStep = 0;
@@ -153,6 +158,9 @@ void App_Loop(void)
     }
     if (snapshot.keyScan) {
         g_App.scanKeys();
+    }
+    if (snapshot.touchEvent) {
+        g_App.requestTouchToggle();
     }
     if (snapshot.touchPoll) {
         g_App.pollTouch();
@@ -194,6 +202,10 @@ void App_Timer_10ms_ISR(void)
         inputDivider = 0;
         g_taskFlags.inputProcess = 1;
     }
+    if (g_touchIrqPending != 0U) {
+        g_touchIrqPending = 0U;
+        g_taskFlags.touchEvent = 1;
+    }
     if (++touchDivider >= 5U) {
         touchDivider = 0;
         g_taskFlags.touchPoll = 1;
@@ -214,4 +226,9 @@ void App_Timer_10ms_ISR(void)
         healthDivider = 0;
         g_taskFlags.healthLog = 1;
     }
+}
+
+void App_TouchPen_ISR(void)
+{
+    g_touchIrqPending = 1U;
 }

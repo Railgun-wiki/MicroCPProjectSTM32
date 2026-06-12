@@ -50,7 +50,6 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-TIM_HandleTypeDef htim3;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -372,10 +371,14 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, TOUCH_TCS_Pin|LCD_CS_Pin|LCD_DC_Pin|LCD_RST_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pins : TOUCH_PEN_Pin TOUCH_DOUT_Pin KEY_PAGE_Pin KEY_CONFIRM_Pin
-                           KEY_BACK_Pin */
-  GPIO_InitStruct.Pin = TOUCH_PEN_Pin|TOUCH_DOUT_Pin|KEY_PAGE_Pin|KEY_CONFIRM_Pin
-                          |KEY_BACK_Pin;
+  /*Configure GPIO pin : TOUCH_PEN_Pin */
+  GPIO_InitStruct.Pin = TOUCH_PEN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(TOUCH_PEN_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : TOUCH_DOUT_Pin KEY_PAGE_Pin KEY_CONFIRM_Pin KEY_BACK_Pin */
+  GPIO_InitStruct.Pin = TOUCH_DOUT_Pin|KEY_PAGE_Pin|KEY_CONFIRM_Pin|KEY_BACK_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -397,11 +400,20 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == TOUCH_PEN_Pin) {
+    App_TouchPen_ISR();
+  }
+}
+
 void HAL_SYSTICK_Callback(void)
 {
   static uint32_t counter = 0;

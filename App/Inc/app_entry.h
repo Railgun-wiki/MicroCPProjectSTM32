@@ -15,6 +15,9 @@ void App_Loop(void);
 // 由 SysTick 分频得到的 10ms 应用调度入口，只做轻量级标志设置
 void App_Timer_10ms_ISR(void);
 
+// 由触摸 PENIRQ 的 EXTI 中断回调调用，只设置触摸待处理标志
+void App_TouchPen_ISR(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -107,7 +107,7 @@ classDiagram
 | 名称 | 说明 |
 | :--- | :--- |
 | `SYS_CPU_FREQ_HZ` | CPU 主频，当前为 `72 MHz` |
-| `SYS_MAIN_LOOP_PERIOD_MS` | 主循环周期，当前为 `100 ms` |
+| `SYS_MAIN_LOOP_PERIOD_MS` | 历史兼容周期宏；当前主路径不再依赖固定 `HAL_Delay(100)` 主循环节流 |
 | `SYS_I2C_ADDR_AHT20` | AHT20 设备地址，`0x38U` |
 | `SYS_I2C_ADDR_BMP280` | BMP280 设备地址，`0x76U` |
 | `Sys::Status` | 底层驱动与通信状态码 |
@@ -238,13 +238,15 @@ AppController(ITempHumSensor& th,
 - `KEY_PAGE`：切换页面
 - `KEY_CONFIRM`：确认/抑制当前告警展示
 - `KEY_BACK`：返回默认页面，并在已确认状态下恢复告警展示
-- 触摸点击右半屏切页
+- 任意一次有效触摸释放均可切页
 
 调度说明：
 
 - `App_Loop()` 持续在主循环中执行，通过任务标志调度应用步骤
 - `AppController::run()` 如保留，仅作为兼容入口；主路径拆分为传感器采样、输入处理、状态机更新和显示刷新等独立任务
 - `App_Timer_10ms_ISR()` 只负责 10ms tick 分频、置任务标志和必要的轻量扫描
+- `TOUCH_PEN` EXTI 回调只设置触摸待处理标志，由主循环下一个 tick 转为触摸事件
+- 50ms 轮询保留为兜底，只用于补观测触摸按下/释放状态，不在 ISR 中读取坐标
 - AHT20 运行期采样通过协作式状态机等待转换完成，不再用 `HAL_Delay(80)` 阻塞主循环
 
 ## BSP 层接口与实现
@@ -360,7 +362,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 - 实现 `App::ITouch`
 - 负责触摸按下检测、原始采样、滤波和校准映射
 - 当前引脚为 `PA8` / `PB4` / `PB3` / `PA1` / `PA0`
-- `readPosition()` 包含 bit-bang 时序、延时和多次采样，后续即使启用 `TOUCH_PEN` 中断，也应在主循环或调度任务中读取坐标
+- `readPosition()` 包含 bit-bang 时序、延时和多次采样，因此即使启用 `TOUCH_PEN` 中断，也只允许在主循环或调度任务中读取坐标
 
 ## 当前对象装配
 

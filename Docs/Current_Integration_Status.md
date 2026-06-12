@@ -50,7 +50,8 @@
   - `KEY_PAGE`：切页
   - `KEY_CONFIRM`：确认/抑制当前告警展示
   - `KEY_BACK`：返回默认页并恢复告警展示
-- 触摸输入仍保留：点击右半屏可切页
+- 触摸输入仍保留：任意一次有效触摸释放事件均可切页
+- `TOUCH_PEN` 使用上升沿 EXTI 仅置触摸待处理标志，切页动作在主循环下一个 tick 完成
 
 ## 当前调度模型
 
@@ -58,6 +59,8 @@
 - `HAL_SYSTICK_Callback()` 每 10ms 触发 `App_Timer_10ms_ISR()`，应用层 tick 只设置任务标志
 - `main()` 主循环持续调用 `App_Loop()`，不再用 `HAL_Delay(100)` 节流
 - `App_Loop()` 在主循环上下文消费任务标志，执行 LED、按键、触摸、传感器、状态机、LCD 和健康日志任务
+- 触摸 EXTI 回调只设置待处理标志，并在下一个 10ms tick 转换为触摸事件任务
+- 50ms 触摸轮询保留为兜底路径，用于在漏中断时补做按下/释放状态观测
 - AHT20 采样使用协作式状态机等待转换完成，运行期不再用 `HAL_Delay(80)` 阻塞系统
 - 当前调度实施细节见 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
 
@@ -73,7 +76,7 @@
 
 - `HAL_DMA_MODULE_ENABLED` 已开启
 - `SPI1` 的 RX/TX DMA 仍连接 `DMA1_Channel2` / `DMA1_Channel3`
-- `TOUCH_PEN`、`TOUCH_DOUT`、`KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK` 仍为上拉输入
+- `TOUCH_PEN` 保持上拉输入并启用上升沿 EXTI；`TOUCH_DOUT`、`KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK` 仍为上拉输入
 - LCD/触摸输出引脚仍为高速输出，且默认电平符合当前设计
 - `PB0` 仍保持 `TIM3_CH3` 供 `PwmLedBsp` 使用
 - `SysTick_Handler()` 仍调用 `HAL_IncTick()` 和 `HAL_SYSTICK_IRQHandler()`，确保 HAL 时基和 10ms 周期任务链路有效

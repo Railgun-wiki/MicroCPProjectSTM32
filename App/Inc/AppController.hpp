@@ -24,6 +24,7 @@ public:
     void scanKeys();
     void processInputs();
     void pollTouch();
+    void requestTouchToggle();
     void startSensorSample(uint32_t nowMs);
     void stepSensors(uint32_t nowMs);
     void updateStateMachine();
@@ -70,6 +71,7 @@ private:
     bool m_tempHumConnected{false};
     bool m_pressureConnected{false};
     bool m_touchToggleRequested{false};
+    bool m_touchObservedPressed{false};
     bool m_tempHumSampleActive{false};
 
 };
