@@ -9,10 +9,10 @@ extern "C" {
 // 系统启动时由 main.c 调用一次，执行对象实例化与驱动自检
 void App_Init(void);
 
-// 在 main.c 的 while(1) 中调用，以 10Hz 的频率轮询执行业务逻辑
+// 在 main.c 的 while(1) 中持续调用，消费由 10ms 调度 tick 设置的任务标志
 void App_Loop(void);
 
-// 在 TIM4 中断服务程序（10ms一次）中被调用，用于指示灯动画和按键物理消抖的实时推进
+// 由 SysTick 分频得到的 10ms 应用调度入口，只做轻量级标志设置
 void App_Timer_10ms_ISR(void);
 
 #ifdef __cplusplus

@@ -1,5 +1,6 @@
 // App/Src/AppController.cpp
 #include "AppController.hpp"
+#include "stm32f1xx_hal.h"
 #include <stdlib.h>
 
 namespace App {
@@ -49,20 +50,37 @@ void AppController::setup()
     m_data.alarmState = Sys::AlarmState::NORMAL;
     m_data.currentViewPage = 0;
     m_data.isMuted = false;
+    m_touchToggleRequested = false;
+    m_tempHumSampleActive = false;
 }
 
 void AppController::run()
 {
-    // 1. 采集最新的传感器物理数据
-    updateTelemetry();
-    
-    // 2. 检查按键输入执行切屏与基础交互
-    handleInteractions();
-    
-    // 3. 执行状态机并更新系统指标
+    const uint32_t nowMs = HAL_GetTick();
+    updateLed(10U);
+    scanKeys();
+    pollTouch();
+    processInputs();
+    startSensorSample(nowMs);
+    stepSensors(nowMs);
     updateStateMachine();
+    refreshDisplay();
+}
 
-    // 4. 刷新 LCD 显示 (将 TelemetryData 转换为 ILcdDisplay::RenderData 传递给 LCD 进行调试渲染)
+void AppController::updateLed(uint32_t elapsedMs)
+{
+    m_led.updatePhysics(elapsedMs);
+}
+
+void AppController::scanKeys()
+{
+    m_keyPage.scanTick();
+    m_keyConfirm.scanTick();
+    m_keyBack.scanTick();
+}
+
+void AppController::refreshDisplay()
+{
     ILcdDisplay::RenderData renderData {
         m_data.temperature,
         m_data.humidity,
@@ -81,30 +99,61 @@ void AppController::run()
     m_lcd.update(renderData);
 }
 
-void AppController::updateTelemetry()
+void AppController::startSensorSample(uint32_t nowMs)
 {
-    int32_t temp{0}, hum{0};
-    if (m_th.read(temp, hum) == Sys::Status::OK) {
-        m_data.temperature = temp;
-        m_data.humidity = hum;
-        m_tempHumConnected = true;
-    } else {
-        m_tempHumConnected = false;
-        SYS_LOG("Error: Failed to read temperature and humidity.");
+    if (!m_tempHumSampleActive) {
+        const Sys::Status tempStatus = m_th.beginSample(nowMs);
+        if (tempStatus == Sys::Status::OK || tempStatus == Sys::Status::ERROR_BUSY) {
+            m_tempHumSampleActive = true;
+        } else {
+            m_tempHumConnected = false;
+        }
     }
 
-    uint32_t press{0}; int32_t alt{0};
+    uint32_t press{0};
+    int32_t alt{0};
     if (m_press.read(press, alt) == Sys::Status::OK) {
         m_data.pressure = press;
         m_data.altitude = alt;
         m_pressureConnected = true;
     } else {
         m_pressureConnected = false;
-        SYS_LOG("Error: Failed to read atmospheric pressure.");
     }
 }
 
-void AppController::handleInteractions()
+void AppController::stepSensors(uint32_t nowMs)
+{
+    if (!m_tempHumSampleActive) {
+        return;
+    }
+
+    int32_t temp{0};
+    int32_t hum{0};
+    const Sys::Status tempStatus = m_th.pollSample(nowMs, temp, hum);
+    if (tempStatus == Sys::Status::OK) {
+        m_data.temperature = temp;
+        m_data.humidity = hum;
+        m_tempHumConnected = true;
+        m_tempHumSampleActive = false;
+    } else if (tempStatus != Sys::Status::ERROR_BUSY) {
+        m_tempHumConnected = false;
+        m_tempHumSampleActive = false;
+    }
+}
+
+void AppController::pollTouch()
+{
+    if (!m_touch.isTouched()) {
+        return;
+    }
+
+    App::TouchPoint pt;
+    if (m_touch.readPosition(pt) && pt.valid && pt.x > 240U) {
+        m_touchToggleRequested = true;
+    }
+}
+
+void AppController::processInputs()
 {
     // KEY1 用于切换 LCD 显示页 (0: 温湿屏, 1: 气压海拔屏)。
     // 当前硬件映射中，该输入由底板 S0 经 FPGA 回送到 STM32 的 KEY_PAGE。
@@ -113,16 +162,10 @@ void AppController::handleInteractions()
         SYS_LOG("Page button pressed. Switched LCD to page %d", m_data.currentViewPage);
     }
     
-    // 触摸：右半屏切换页面
-    // Touch input: tapping on the right half of the screen flips the page.
-    if (m_touch.isTouched()) {
-        App::TouchPoint pt;
-        if (m_touch.readPosition(pt) && pt.valid) {
-            if (pt.x > 240) {
-                m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
-                SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
-            }
-        }
+    if (m_touchToggleRequested) {
+        m_touchToggleRequested = false;
+        m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
+        SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
     }
 
     // KEY2 用于确认/抑制当前报警状态，不再代表声音相关的静音硬件。
@@ -152,6 +195,16 @@ void AppController::handleInteractions()
             SYS_LOG("Back button pressed.");
         }
     }
+}
+
+void AppController::logHealth()
+{
+    SYS_LOG("Health: page=%d tempConn=%d pressConn=%d alarm=%d muted=%d",
+            m_data.currentViewPage,
+            m_tempHumConnected ? 1 : 0,
+            m_pressureConnected ? 1 : 0,
+            static_cast<int>(m_data.alarmState),
+            m_data.isMuted ? 1 : 0);
 }
 
 void AppController::updateStateMachine()

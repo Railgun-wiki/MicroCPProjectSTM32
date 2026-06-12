@@ -13,7 +13,7 @@ public:
     void setWarningBlinking() override;
     void turnOff() override;
     
-    // 在 10ms 中断服务中周期性推进动画物理计算并更新 CCR 寄存器
+    // 由调度器周期性推进动画物理计算并更新 CCR 寄存器
     void updatePhysics(uint32_t elapsedMs) override;
 
 private:

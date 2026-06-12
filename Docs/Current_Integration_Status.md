@@ -54,11 +54,12 @@
 
 ## 当前调度模型
 
-- `SysTick_Handler()` 调用 `HAL_SYSTICK_IRQHandler()`，由 `HAL_SYSTICK_Callback()` 每 10ms 触发 `App_Timer_10ms_ISR()`
-- `App_Timer_10ms_ISR()` 当前负责推进 `PwmLedBsp::updatePhysics(10)`，并扫描 `KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK`
-- `main()` 主循环当前仍通过 `HAL_Delay(100)` 节流，约 10Hz 调用 `App_Loop()`
-- 传感器采样、触摸处理、应用状态机和 LCD 刷新当前仍由 `AppController::run()` 在主循环周期内统一执行
-- 后续调度重构路线见 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
+- `SysTick_Handler()` 调用 `HAL_IncTick()` 和 `HAL_SYSTICK_IRQHandler()`，保持 HAL 1ms 时基有效
+- `HAL_SYSTICK_Callback()` 每 10ms 触发 `App_Timer_10ms_ISR()`，应用层 tick 只设置任务标志
+- `main()` 主循环持续调用 `App_Loop()`，不再用 `HAL_Delay(100)` 节流
+- `App_Loop()` 在主循环上下文消费任务标志，执行 LED、按键、触摸、传感器、状态机、LCD 和健康日志任务
+- AHT20 采样使用协作式状态机等待转换完成，运行期不再用 `HAL_Delay(80)` 阻塞系统
+- 当前调度实施细节见 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
 
 ## 调试与重映射要求
 
@@ -75,4 +76,4 @@
 - `TOUCH_PEN`、`TOUCH_DOUT`、`KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK` 仍为上拉输入
 - LCD/触摸输出引脚仍为高速输出，且默认电平符合当前设计
 - `PB0` 仍保持 `TIM3_CH3` 供 `PwmLedBsp` 使用
-- `SysTick_Handler()` 仍调用 `HAL_SYSTICK_IRQHandler()`，确保 10ms 周期任务链路有效
+- `SysTick_Handler()` 仍调用 `HAL_IncTick()` 和 `HAL_SYSTICK_IRQHandler()`，确保 HAL 时基和 10ms 周期任务链路有效

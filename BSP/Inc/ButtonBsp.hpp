@@ -11,7 +11,7 @@ public:
     
     bool isPressed() override;
     
-    // 定时器 10ms 中断扫描方法
+    // 由调度器按 10ms 周期调用的扫描方法
     void scanTick() override;
 
 private:

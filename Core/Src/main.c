@@ -118,7 +118,6 @@ int main(void)
   while (1)
   {
     App_Loop();
-    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

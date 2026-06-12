@@ -17,7 +17,7 @@ public:
     // 强制关闭指示灯
     virtual void turnOff() = 0;
     
-    // 渐变时序更新驱动接口，用于在 10ms 的 Timer 中断内周期执行动画物理模拟
+    // 渐变时序更新驱动接口，由调度器按固定周期调用以推进动画物理模拟
     virtual void updatePhysics(uint32_t elapsedMs) = 0;
 };
 

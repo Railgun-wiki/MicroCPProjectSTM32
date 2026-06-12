@@ -20,6 +20,15 @@ public:
     
     // 主循环状态机轮询方法 (以 10Hz 的心跳周期运行)
     void run();
+    void updateLed(uint32_t elapsedMs);
+    void scanKeys();
+    void processInputs();
+    void pollTouch();
+    void startSensorSample(uint32_t nowMs);
+    void stepSensors(uint32_t nowMs);
+    void updateStateMachine();
+    void refreshDisplay();
+    void logHealth();
 
     // 传感器遥测数据采集结构体 (用于由成员 B 读取直接更新 UI)
     struct TelemetryData {
@@ -60,10 +69,9 @@ private:
     // 传感器连接状态追踪
     bool m_tempHumConnected{false};
     bool m_pressureConnected{false};
+    bool m_touchToggleRequested{false};
+    bool m_tempHumSampleActive{false};
 
-    void updateTelemetry();
-    void updateStateMachine();
-    void handleInteractions();
 };
 
 } // namespace App
