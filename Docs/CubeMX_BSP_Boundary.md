@@ -6,6 +6,7 @@
 
 - [文档导航](./README.md)
 - [当前集成状态](./Current_Integration_Status.md)
+- [调度架构方案对比与路线](./Scheduling_Architecture.md)
 
 本项目采用“CubeMX 管配置、BSP 管行为”的边界约定。BSP 可以驱动引脚、访问设备，但不能再次配置已经在 `MicroCPProjectSTM32.ioc` 中声明过的 GPIO 模式、上下拉、速度、复用功能和外设时钟。
 
@@ -20,6 +21,7 @@
 - `PA0/PA1` 在本工程中为触摸专用，不再绑定 `ButtonBsp`
 - 传感器总线：`PB10/PB11` 为 `I2C2_SCL/I2C2_SDA`，启用硬件 I2C2 后不得再复用为软件 I2C GPIO
 - 调试口：保持 SWD-only。由于 `PB3/PB4` 被触摸占用，必须关闭 JTAG，仅保留 `PA13/PA14`
+- 系统节拍：`SysTick` 是当前 10ms 软件任务节拍来源，生成后必须保留 `SysTick_Handler()` 到 `HAL_SYSTICK_Callback()` 的回调链
 
 ## 由 BSP 负责的行为
 
@@ -37,4 +39,5 @@
 - `MX_SPI1_Init()` 保持 `SPI_POLARITY_LOW`、`SPI_PHASE_1EDGE`、`SPI_BAUDRATEPRESCALER_2`
 - `MX_TIM3_Init()` 仍保留 `TIM3_CH3` 输出，供 `PwmLedBsp` 控制状态灯
 - `MX_GPIO_Init()` 或其用户代码段仍保留 `__HAL_AFIO_REMAP_SWJ_NOJTAG()`，确保 `PB3/PB4` 可用于触摸
+- `SysTick_Handler()` 仍调用 `HAL_SYSTICK_IRQHandler()`，否则 `HAL_SYSTICK_Callback()` 不会触发 `App_Timer_10ms_ISR()`
 - BSP 文件没有重新配置已经由 `.ioc` 描述的 GPIO

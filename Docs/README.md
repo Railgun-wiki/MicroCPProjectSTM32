@@ -7,7 +7,8 @@
 1. [当前集成状态](./Current_Integration_Status.md)
 2. [CubeMX 与 BSP 边界](./CubeMX_BSP_Boundary.md)
 3. [API 接口参考](./API.md)
-4. [设计与开发规范](./Specification.md)
+4. [调度架构方案对比与路线](./Scheduling_Architecture.md)
+5. [设计与开发规范](./Specification.md)
 
 ## 当前工程摘要
 
@@ -24,10 +25,9 @@
 | [Current_Integration_Status.md](./Current_Integration_Status.md) | 当前可运行工程的硬件映射、输入模型、DMA/SWD 约束。 | 所有维护者 |
 | [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md) | 约束哪些内容归 CubeMX，哪些内容归 BSP 和 App。 | 维护硬件初始化和驱动的开发者 |
 | [API.md](./API.md) | 当前抽象接口、驱动实现、关键数据结构和对象装配方式。 | 编码人员 |
+| [Scheduling_Architecture.md](./Scheduling_Architecture.md) | 对比 tick 标志表、纯中断事件驱动、中断 FIFO 队列，并给出推荐调度路线。 | 架构维护者 |
 | [Specification.md](./Specification.md) | 目录职责、依赖倒置、编码和构建规范。 | 新加入项目的开发者 |
 | [FPGA_LCD_Setup.md](./FPGA_LCD_Setup.md) | FPGA 透传接线与约束说明。非当前 MCU 代码实现文档。 | 联调硬件人员 |
-| [FPGA_LCD_Logic_Expansion.md](./FPGA_LCD_Logic_Expansion.md) | FPGA 逻辑扩展方向研究。 | 架构预研 |
-| [Lightweight_GUI_Frameworks.md](./Lightweight_GUI_Frameworks.md) | 轻量 GUI 方案调研。 | GUI 预研 |
 | [Touch_GUI_Architecture.md](./Touch_GUI_Architecture.md) | 触摸 GUI 方向方案分析。 | GUI/交互预研 |
 
 ## 当前硬件映射
@@ -90,6 +90,38 @@ graph TD
     TimerISR --> BackBtn
 ```
 
+## 项目路线图
+
+### 已完成
+
+- LCD 通过 `SPI1 + LcdBsp + GuiEngine` 完成基础显示和调试页面渲染
+- 触摸屏通过 `TouchBsp` 完成按下检测、坐标采样、滤波和基础翻页
+- AHT20 与 BMP280 通过 `HardwareI2cBsp + I2C2` 接入
+- `PB0 / TIM3_CH3` 状态灯已接入，支持正常呼吸与异常闪烁
+- `S0/S2/S3` 三个物理键已通过 FPGA 回送到 `PA2/PA3/PA4`
+- `SysTick` 已恢复驱动 10ms 周期任务，按键扫描与 LED 动画可运行
+
+### 当前短期目标
+
+- 保持现有 `SysTick + App_Timer_10ms_ISR()` 链路稳定
+- 继续通过串口 `SYS_LOG` 验证 LED、按键、触摸和传感器行为
+- 清理临时调试日志，将必要日志收敛为可长期保留的健康状态输出
+- 将触摸响应从 100ms 主循环节流中解耦出来，优先评估 50ms 周期触摸任务
+
+### 中期重构目标
+
+- 参考 [Scheduling_Architecture.md](./Scheduling_Architecture.md)，把主循环从 `HAL_Delay(100)` 改为非阻塞任务标志调度
+- 将 `AppController::run()` 拆分为传感器采样、输入处理、状态机更新、显示刷新等独立步骤
+- 为 UI 刷新、传感器采样和心跳日志设置独立周期
+- 评估 `TOUCH_PEN` EXTI，只在中断中置触摸事件标志，坐标读取仍保留在主循环
+
+### 长期方向
+
+- 根据交互复杂度决定是否引入固定容量事件 FIFO
+- 建立更完整的触摸 UI 状态机，支持设置页、阈值调整和确认/返回交互
+- 保持 STM32 与 FPGA 的引脚映射文档同步，避免固件、FPGA 约束和硬件手册分叉
+- 完善上板验证流程，形成“烧录、串口检查、LED/按键/触摸回归”的固定测试清单
+
 ## 构建方式
 
 工程当前使用 CMake Presets 和 `cmake/gcc-arm-none-eabi.cmake`。
@@ -113,4 +145,5 @@ cmake --build --preset Release
 - 需要核对“当前工程到底怎么接、怎么跑”，先看 [Current_Integration_Status.md](./Current_Integration_Status.md)
 - 需要修改 `.ioc`、GPIO、DMA 或外设初始化，先看 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
 - 需要接驱动或改 `AppController` 依赖，先看 [API.md](./API.md)
+- 需要讨论主循环、触摸中断、事件队列或非阻塞调度，先看 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
 - 研究文档均不是当前实现说明；它们保留为备选方案或历史分析，使用前必须先对照当前状态文档

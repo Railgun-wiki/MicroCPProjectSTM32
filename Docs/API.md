@@ -10,6 +10,7 @@
 - `App/Src/AppController.cpp`
 
 如需先确认当前硬件映射，请先看 [Current_Integration_Status.md](./Current_Integration_Status.md)。
+如需了解后续非阻塞调度和事件队列路线，请看 [Scheduling_Architecture.md](./Scheduling_Architecture.md)。
 
 ## 架构关系
 
@@ -160,6 +161,7 @@ classDiagram
   - `KEY_CONFIRM` (`PA3`, 对应底板 `S2`)
   - `KEY_BACK` (`PA4`, 对应底板 `S3`)
 - `scanTick()` 仍在 `App_Timer_10ms_ISR()` 中被调用，保持接口契约一致
+- 当前 10ms 调度链路依赖 `SysTick_Handler()` 调用 `HAL_SYSTICK_IRQHandler()`
 
 ### `ITouch` 与 `TouchPoint`
 
@@ -237,6 +239,12 @@ AppController(ITempHumSensor& th,
 - `KEY_CONFIRM`：确认/抑制当前告警展示
 - `KEY_BACK`：返回默认页面，并在已确认状态下恢复告警展示
 - 触摸点击右半屏切页
+
+调度说明：
+
+- 当前 `AppController::run()` 仍由主循环约 100ms 调用一次
+- LED 动画和按键扫描已经脱离主循环，放在 10ms 周期任务中
+- 后续若进入非阻塞调度，建议把 `run()` 拆成传感器采样、输入处理、状态机更新和显示刷新等小步骤
 
 ## BSP 层接口与实现
 
@@ -351,6 +359,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 - 实现 `App::ITouch`
 - 负责触摸按下检测、原始采样、滤波和校准映射
 - 当前引脚为 `PA8` / `PB4` / `PB3` / `PA1` / `PA0`
+- `readPosition()` 包含 bit-bang 时序、延时和多次采样，后续即使启用 `TOUCH_PEN` 中断，也应在主循环或调度任务中读取坐标
 
 ## 当前对象装配
 
@@ -382,4 +391,5 @@ static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
 
 - 若修改当前接线、DMA、I2C 或触摸路径，先同步 [Current_Integration_Status.md](./Current_Integration_Status.md)
 - 若修改 `.ioc` 生成边界，先同步 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
+- 若修改主循环周期、`SysTick` 链路、任务标志或事件队列，先同步 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
 - 若只是研究替代方案，不要把研究文档中的描述误写成当前实现

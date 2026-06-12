@@ -137,6 +137,14 @@ graph TD
 - 业务逻辑放在 `App/`
 - 每次重新生成代码后，都必须核对 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
 
+## 调度规范
+
+- 当前 10ms 软件节拍依赖 `SysTick_Handler()` 调用 `HAL_SYSTICK_IRQHandler()`，再由 `HAL_SYSTICK_Callback()` 调用 `App_Timer_10ms_ISR()`
+- ISR 中只放轻量操作，例如计数、置位、按键扫描和 LED PWM 动画推进
+- 触摸坐标读取、LCD 刷新、传感器采样和较长串口输出不得放入 ISR
+- 后续调度重构优先采用 `tick + 标志表`，必要时再为触摸、串口等异步输入引入固定容量事件 FIFO
+- 调度方案演进必须同步更新 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
+
 ## 文档维护规范
 
 - “当前实现”类文档只能描述当前工程真实状态
@@ -146,6 +154,7 @@ graph TD
   - `AppController` 的输入模型
   - 总线默认实现
   - 显示链路、DMA、中断和调试口约束
+  - 主循环周期、`SysTick` 链路、任务调度和事件队列策略
   - CMake 构建方式
 
 ## 不应再使用的过时假设

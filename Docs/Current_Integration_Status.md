@@ -7,6 +7,7 @@
 - [文档导航](./README.md)
 - [CubeMX 与 BSP 边界](./CubeMX_BSP_Boundary.md)
 - [API 接口参考](./API.md)
+- [调度架构方案对比与路线](./Scheduling_Architecture.md)
 
 本文档用于记录 LCD、触摸与 I2C2 清理后的当前工程真实状态，作为后续维护时的快速核对基准。
 
@@ -51,6 +52,14 @@
   - `KEY_BACK`：返回默认页并恢复告警展示
 - 触摸输入仍保留：点击右半屏可切页
 
+## 当前调度模型
+
+- `SysTick_Handler()` 调用 `HAL_SYSTICK_IRQHandler()`，由 `HAL_SYSTICK_Callback()` 每 10ms 触发 `App_Timer_10ms_ISR()`
+- `App_Timer_10ms_ISR()` 当前负责推进 `PwmLedBsp::updatePhysics(10)`，并扫描 `KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK`
+- `main()` 主循环当前仍通过 `HAL_Delay(100)` 节流，约 10Hz 调用 `App_Loop()`
+- 传感器采样、触摸处理、应用状态机和 LCD 刷新当前仍由 `AppController::run()` 在主循环周期内统一执行
+- 后续调度重构路线见 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
+
 ## 调试与重映射要求
 
 - `PB3/PB4` 被触摸占用，因此调试口必须保持 SWD-only
@@ -66,3 +75,4 @@
 - `TOUCH_PEN`、`TOUCH_DOUT`、`KEY_PAGE`、`KEY_CONFIRM`、`KEY_BACK` 仍为上拉输入
 - LCD/触摸输出引脚仍为高速输出，且默认电平符合当前设计
 - `PB0` 仍保持 `TIM3_CH3` 供 `PwmLedBsp` 使用
+- `SysTick_Handler()` 仍调用 `HAL_SYSTICK_IRQHandler()`，确保 10ms 周期任务链路有效
