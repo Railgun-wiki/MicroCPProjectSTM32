@@ -6,25 +6,6 @@
 
 namespace Bsp {
 
-namespace {
-
-constexpr uint32_t kSpiWaitTimeout = 100000U;
-GPIO_TypeDef* const kDiagnosticCsPort = GPIOB;
-constexpr uint16_t kDiagnosticCsPin = GPIO_PIN_5;
-
-static bool waitForSpiFlagSet(SPI_TypeDef* SPIx, uint32_t flag)
-{
-    uint32_t timeout = kSpiWaitTimeout;
-    while ((SPIx->SR & flag) == 0U) {
-        if (--timeout == 0U) {
-            return false;
-        }
-    }
-    return true;
-}
-
-} // namespace
-
 LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
                GPIO_TypeDef* csPort, uint16_t csPin,
                GPIO_TypeDef* rsPort, uint16_t rsPin,
@@ -44,8 +25,6 @@ LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
 
 void LcdBsp::init()
 {
-    printf("[LCD] LCD init start\r\n");
-
     // 1. 动态启用 GPIO 端口时钟
     if (m_csPort == GPIOA || m_rsPort == GPIOA || m_rstPort == GPIOA || m_ledPort == GPIOA) {
         __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -75,25 +54,21 @@ void LcdBsp::init()
     GPIO_InitStruct.Pin = m_ledPin;
     HAL_GPIO_Init(m_ledPort, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = kDiagnosticCsPin;
-    HAL_GPIO_Init(kDiagnosticCsPort, &GPIO_InitStruct);
-    csHigh();
-
-    // 3. 等待 LCD 上电稳定，再执行硬件复位
+    // 3. 等待 FPGA 就绪，再执行硬件复位
     HAL_Delay(500);
     reset();
 
-    // 4. 先打开背光并显式启用 SPI，避免寄存器直写卡在 RXNE 等待。
-    ledOn();
-    printf("[LCD] backlight on\r\n");
-    if ((m_hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE) {
-        __HAL_SPI_ENABLE(m_hspi);
-    }
-    (void)m_hspi->Instance->DR;
-    (void)m_hspi->Instance->SR;
-    printf("[LCD] spi enabled\r\n");
+    // 调试：测试 GPIO 引脚切换
+    csLow(); rsLow();
+    printf("[LCD] After csLow/rsLow: CS=%d DC=%d\r\n",
+           HAL_GPIO_ReadPin(m_csPort, m_csPin),
+           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
+    csHigh(); rsHigh();
+    printf("[LCD] After csHigh/rsHigh: CS=%d DC=%d\r\n",
+           HAL_GPIO_ReadPin(m_csPort, m_csPin),
+           HAL_GPIO_ReadPin(m_rsPort, m_rsPin));
 
-    // 5. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
+    // 4. 写入 ST7796S 驱动芯片的核心初始化寄存器序列
     writeCmd(0xF0); writeData(0xC3);
     writeCmd(0xF0); writeData(0x96);
     
@@ -157,7 +132,18 @@ void LcdBsp::init()
     writeCmd(0x11); // 退出睡眠模式
     HAL_Delay(120);
     writeCmd(0x29); // 开启显示屏
-    printf("[LCD] init sequence done\r\n");
+
+    // 5. 亮屏并清屏
+    ledOn();
+
+    // 调试：填充红色测试 GRAM 写入
+    printf("[LCD] Before fill: CR1=0x%04lX SR=0x%02lX\r\n",
+           (unsigned long)m_hspi->Instance->CR1,
+           (unsigned long)m_hspi->Instance->SR);
+    fillRect(0, 0, m_width - 1, m_height - 1, 0xF800); // 红色
+    printf("[LCD] After fill: CR1=0x%04lX SR=0x%02lX\r\n",
+           (unsigned long)m_hspi->Instance->CR1,
+           (unsigned long)m_hspi->Instance->SR);
 }
 
 void LcdBsp::reset()
@@ -168,35 +154,13 @@ void LcdBsp::reset()
     HAL_Delay(50);
 }
 
-// SPI 单字节发送（与参考工程 SPI_WriteByte 一致，诊断阶段加超时）
-static bool spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
+// SPI 单字节发送（与参考工程 SPI_WriteByte 一致）
+static inline void spiWriteByte(SPI_TypeDef* SPIx, uint8_t data)
 {
-    if (!waitForSpiFlagSet(SPIx, SPI_SR_TXE)) {
-        printf("[LCD] SPI timeout waiting TXE before 0x%02X\r\n", data);
-        return false;
-    }
+    while (!(SPIx->SR & SPI_SR_TXE));
     SPIx->DR = data;
-    if (!waitForSpiFlagSet(SPIx, SPI_SR_RXNE)) {
-        printf("[LCD] SPI timeout waiting RXNE after 0x%02X SR=0x%04lX CR1=0x%04lX\r\n",
-               data,
-               static_cast<unsigned long>(SPIx->SR),
-               static_cast<unsigned long>(SPIx->CR1));
-        return false;
-    }
+    while (!(SPIx->SR & SPI_SR_RXNE));
     (void)SPIx->DR;
-    return true;
-}
-
-void LcdBsp::csLow()
-{
-    HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_RESET);
-}
-
-void LcdBsp::csHigh()
-{
-    HAL_GPIO_WritePin(m_csPort, m_csPin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(kDiagnosticCsPort, kDiagnosticCsPin, GPIO_PIN_SET);
 }
 
 void LcdBsp::writeCmd(uint8_t cmd)
