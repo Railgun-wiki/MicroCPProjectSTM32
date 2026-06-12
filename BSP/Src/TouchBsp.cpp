@@ -1,6 +1,7 @@
 // BSP/Src/TouchBsp.cpp
 #include "TouchBsp.hpp"
 #include <stdlib.h>
+#include "sys.hpp"
 
 namespace Bsp {
 
@@ -30,6 +31,7 @@ bool TouchBsp::init()
     csHigh();
     clkLow();
     dinLow();
+    SYS_LOG("Touch GPIO bit-bang interface ready.");
 
     return true;
 }
@@ -142,6 +144,11 @@ void TouchBsp::setCalibration(int16_t xMin, int16_t xMax,
     m_yMin = yMin;
     m_yMax = yMax;
     m_calibrated = true;
+    SYS_LOG("Touch calibration set: x=[%d,%d] y=[%d,%d]",
+            (int)xMin,
+            (int)xMax,
+            (int)yMin,
+            (int)yMax);
 }
 
 } // namespace Bsp

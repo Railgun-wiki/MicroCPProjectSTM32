@@ -84,7 +84,8 @@ void App_Init(void)
 
     g_I2cBus.init();
     g_Lcd.setGui(&g_Gui);
-    g_Touch.init();
+    const bool touchReady = g_Touch.init();
+    SYS_LOG("Touch BSP init: %s", touchReady ? "ready" : "failed");
 
     // Diagnostic I2C scanner on boot
     g_Lcd.init();
@@ -104,6 +105,10 @@ void App_Init(void)
             }
         }
     }
+    SYS_LOG("Boot scan summary: group=%lu aht20=%s bmp280=%s",
+            (unsigned long)SYS_GROUP_NUMBER,
+            aht20Connected ? "connected" : "missing",
+            bmp280Connected ? "connected" : "missing");
 
     char lineBuf[48];
     sprintf(lineBuf, "GROUP: %lu", (unsigned long)SYS_GROUP_NUMBER);

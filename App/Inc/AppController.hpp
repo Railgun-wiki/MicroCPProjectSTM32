@@ -73,6 +73,7 @@ private:
     bool m_touchToggleRequested{false};
     bool m_touchObservedPressed{false};
     bool m_tempHumSampleActive{false};
+    bool m_touchPressLogged{false};
 
 };
 

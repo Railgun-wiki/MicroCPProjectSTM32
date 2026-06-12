@@ -103,22 +103,40 @@ void AppController::refreshDisplay()
 void AppController::startSensorSample(uint32_t nowMs)
 {
     if (!m_tempHumSampleActive) {
+        const bool wasConnected = m_tempHumConnected;
         const Sys::Status tempStatus = m_th.beginSample(nowMs);
         if (tempStatus == Sys::Status::OK || tempStatus == Sys::Status::ERROR_BUSY) {
             m_tempHumSampleActive = true;
+            if (!wasConnected) {
+                SYS_LOG("AHT20 communication recovered. Sampling resumed.");
+            }
         } else {
             m_tempHumConnected = false;
+            if (wasConnected) {
+                SYS_LOG("AHT20 communication lost. beginSample status=%d", static_cast<int>(tempStatus));
+            }
         }
     }
 
+    const bool wasPressureConnected = m_pressureConnected;
     uint32_t press{0};
     int32_t alt{0};
-    if (m_press.read(press, alt) == Sys::Status::OK) {
+    const Sys::Status pressStatus = m_press.read(press, alt);
+    if (pressStatus == Sys::Status::OK) {
         m_data.pressure = press;
         m_data.altitude = alt;
         m_pressureConnected = true;
+        if (!wasPressureConnected) {
+            SYS_LOG("BMP280 data recovered. Pressure=%lu Pa Altitude=%ld.%ld m",
+                    (unsigned long)m_data.pressure,
+                    (long)(m_data.altitude / 10),
+                    (long)abs(m_data.altitude % 10));
+        }
     } else {
         m_pressureConnected = false;
+        if (wasPressureConnected) {
+            SYS_LOG("BMP280 communication lost. read status=%d", static_cast<int>(pressStatus));
+        }
     }
 }
 
@@ -130,15 +148,26 @@ void AppController::stepSensors(uint32_t nowMs)
 
     int32_t temp{0};
     int32_t hum{0};
+    const bool wasConnected = m_tempHumConnected;
     const Sys::Status tempStatus = m_th.pollSample(nowMs, temp, hum);
     if (tempStatus == Sys::Status::OK) {
         m_data.temperature = temp;
         m_data.humidity = hum;
         m_tempHumConnected = true;
         m_tempHumSampleActive = false;
+        if (!wasConnected) {
+            SYS_LOG("AHT20 data recovered. Temperature=%ld.%ld C Humidity=%ld.%ld %%",
+                    (long)(m_data.temperature / 10),
+                    (long)abs(m_data.temperature % 10),
+                    (long)(m_data.humidity / 10),
+                    (long)abs(m_data.humidity % 10));
+        }
     } else if (tempStatus != Sys::Status::ERROR_BUSY) {
         m_tempHumConnected = false;
         m_tempHumSampleActive = false;
+        if (wasConnected) {
+            SYS_LOG("AHT20 communication lost. pollSample status=%d", static_cast<int>(tempStatus));
+        }
     }
 }
 
@@ -146,21 +175,30 @@ void AppController::pollTouch()
 {
     const bool touched = m_touch.isTouched();
     if (touched) {
+        if (!m_touchPressLogged) {
+            SYS_LOG("Touch pressed.");
+            m_touchPressLogged = true;
+        }
         m_touchObservedPressed = true;
         return;
     }
 
     if (m_touchObservedPressed && !m_touchToggleRequested) {
         m_touchObservedPressed = false;
+        m_touchPressLogged = false;
         m_touchToggleRequested = true;
-        SYS_LOG("Touch poll fallback: release detected.");
+        SYS_LOG("Touch released. Source=polling fallback.");
+    } else if (!m_touchObservedPressed) {
+        m_touchPressLogged = false;
     }
 }
 
 void AppController::requestTouchToggle()
 {
     m_touchObservedPressed = false;
+    m_touchPressLogged = false;
     m_touchToggleRequested = true;
+    SYS_LOG("Touch release event queued from IRQ.");
 }
 
 void AppController::processInputs()

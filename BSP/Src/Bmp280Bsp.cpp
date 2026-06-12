@@ -39,6 +39,7 @@ Sys::Status Bmp280Bsp::init()
     // 字节值: (4 << 5) | (4 << 2) = 0x80 | 0x10 = 0x90
     uint8_t configVal = 0x90;
     if (m_i2c.writeRegs(SYS_I2C_ADDR_BMP280, 0xF5, &configVal, 1) != Sys::Status::OK) {
+        SYS_LOG("Error: Failed to write BMP280 config register.");
         return Sys::Status::ERROR_INIT;
     }
 
@@ -47,6 +48,7 @@ Sys::Status Bmp280Bsp::init()
     // 字节值: (2 << 5) | (5 << 2) | 3 = 0x40 | 0x14 | 0x03 = 0x57
     uint8_t ctrlMeasVal = 0x57;
     if (m_i2c.writeRegs(SYS_I2C_ADDR_BMP280, 0xF4, &ctrlMeasVal, 1) != Sys::Status::OK) {
+        SYS_LOG("Error: Failed to write BMP280 ctrl_meas register.");
         return Sys::Status::ERROR_INIT;
     }
 
