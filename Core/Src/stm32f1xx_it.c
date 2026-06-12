@@ -186,24 +186,10 @@ void SysTick_Handler(void)
 
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
-  HAL_SYSTICK_IRQHandler();
   /* USER CODE BEGIN SysTick_IRQn 1 */
+  HAL_SYSTICK_IRQHandler();
 
   /* USER CODE END SysTick_IRQn 1 */
-}
-
-/**
-  * @brief This function handles EXTI line0 interrupt.
-  */
-void EXTI0_IRQHandler(void)
-{
-  /* USER CODE BEGIN EXTI0_IRQn 0 */
-
-  /* USER CODE END EXTI0_IRQn 0 */
-  HAL_GPIO_EXTI_IRQHandler(TOUCH_PEN_Pin);
-  /* USER CODE BEGIN EXTI0_IRQn 1 */
-
-  /* USER CODE END EXTI0_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -228,5 +214,9 @@ void DMA1_Channel3_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+void EXTI0_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(TOUCH_PEN_Pin);
+}
 
 /* USER CODE END 1 */
