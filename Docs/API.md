@@ -9,8 +9,7 @@
 - `App/Src/app_entry.cpp`
 - `App/Src/AppController.cpp`
 
-如需先确认当前硬件映射，请先看 [Current_Integration_Status.md](./Current_Integration_Status.md)。
-如需了解后续非阻塞调度和事件队列路线，请看 [Scheduling_Architecture.md](./Scheduling_Architecture.md)。
+如需先确认当前硬件映射，请先看 [Status.md](./Status.md)。
 
 ## 架构关系
 
@@ -20,12 +19,14 @@ classDiagram
         class ITempHumSensor {
             <<interface>>
             +init() Sys::Status
-            +read(float&, float&) Sys::Status
+            +beginSample(uint32_t) Sys::Status
+            +pollSample(uint32_t,int32_t&,int32_t&) Sys::Status
+            +read(int32_t&,int32_t&) Sys::Status
         }
         class IPressureSensor {
             <<interface>>
             +init() Sys::Status
-            +read(float&, float&) Sys::Status
+            +read(uint32_t&,int32_t&) Sys::Status
         }
         class IIndicator {
             <<interface>>
@@ -86,18 +87,6 @@ classDiagram
     ITouch <|.. TouchBsp
     II2cBus <|.. HardwareI2cBsp
     II2cBus <|.. SoftI2cBsp
-
-    AppController --> ITempHumSensor
-    AppController --> IPressureSensor
-    AppController --> IIndicator
-    AppController --> IButton
-    AppController --> ILcdDisplay
-    AppController --> ITouch
-
-    Aht20Bsp --> II2cBus
-    Bmp280Bsp --> II2cBus
-    LcdBsp --> GuiEngine
-    GuiEngine --> ILcdDisplay
 ```
 
 ## 系统级定义
@@ -107,9 +96,11 @@ classDiagram
 | 名称 | 说明 |
 | :--- | :--- |
 | `SYS_CPU_FREQ_HZ` | CPU 主频，当前为 `72 MHz` |
-| `SYS_MAIN_LOOP_PERIOD_MS` | 历史兼容周期宏；当前主路径不再依赖固定 `HAL_Delay(100)` 主循环节流 |
+| `SYS_MAIN_LOOP_PERIOD_MS` | 历史兼容周期宏；当前主路径不再依赖固定主循环延时 |
 | `SYS_I2C_ADDR_AHT20` | AHT20 设备地址，`0x38U` |
 | `SYS_I2C_ADDR_BMP280` | BMP280 设备地址，`0x76U` |
+| `SYS_GROUP_NUMBER` | 启动页和日志使用的组号 |
+| `SYS_LOG(...)` | 当前调试日志宏，经 `USART1` 输出 |
 | `Sys::Status` | 底层驱动与通信状态码 |
 | `Sys::AlarmState` | `NORMAL`、`WARNING_TEMP`、`WARNING_PRES`、`MUTED` |
 
@@ -120,18 +111,31 @@ classDiagram
 文件：`App/Inc/ITempHumSensor.hpp`
 
 - `Sys::Status init()`
-- `Sys::Status read(float& temperature, float& humidity)`
+- `Sys::Status beginSample(uint32_t nowMs)`
+- `Sys::Status pollSample(uint32_t nowMs, int32_t& temperature, int32_t& humidity)`
+- `Sys::Status read(int32_t& temperature, int32_t& humidity)`
 
 当前实现：`Bsp::Aht20Bsp`
+
+说明：
+
+- 温度、湿度均为放大 10 倍的定点整数
+- 当前运行路径主要使用 `beginSample()` + `pollSample()` 的非阻塞采样
+- `read()` 仍保留为同步封装入口
 
 ### `IPressureSensor`
 
 文件：`App/Inc/IPressureSensor.hpp`
 
 - `Sys::Status init()`
-- `Sys::Status read(float& pressure, float& altitude)`
+- `Sys::Status read(uint32_t& pressure, int32_t& altitude)`
 
 当前实现：`Bsp::Bmp280Bsp`
+
+说明：
+
+- `pressure` 单位为 `Pa`
+- `altitude` 为放大 10 倍的定点米值
 
 ### `IIndicator`
 
@@ -151,17 +155,11 @@ classDiagram
 - `bool isPressed()`
 - `void scanTick()`
 
-接口用于表达物理按键输入，当前工程已落地为页切换、确认和返回三个基础交互。
-
 当前工程状态：
 
-- 已绑定物理 `ButtonBsp`
-- `app_entry.cpp` 中注入了 3 个真实按键：
-  - `KEY_PAGE` (`PA2`, 对应底板 `S0`)
-  - `KEY_CONFIRM` (`PA3`, 对应底板 `S2`)
-  - `KEY_BACK` (`PA4`, 对应底板 `S3`)
-- `scanTick()` 仍在 `App_Timer_10ms_ISR()` 中被调用，保持接口契约一致
-- 当前 10ms 调度链路依赖 `SysTick_Handler()` 调用 `HAL_SYSTICK_IRQHandler()`
+- `app_entry.cpp` 中注入了 3 个真实按键
+- `scanTick()` 由 10ms 周期任务调用
+- `ButtonBsp` 当前采用低电平按下、20ms 消抖
 
 ### `ITouch` 与 `TouchPoint`
 
@@ -183,6 +181,12 @@ classDiagram
 
 当前实现：`Bsp::TouchBsp`
 
+说明：
+
+- 当前业务主路径只把触摸释放解释为切页事件
+- `readPosition()` 仍保留，供后续设置页或更细交互使用
+- 坐标读取只能在主循环或任务上下文执行，不进入 ISR
+
 ### `ILcdDisplay`
 
 文件：`App/Inc/ILcdDisplay.hpp`
@@ -197,7 +201,7 @@ classDiagram
 - `getHeight() const`
 - `update(const RenderData& data)`
 
-`RenderData` 是 `AppController` 传给显示层的解耦数据包，包含：
+`RenderData` 包含：
 
 | 类别 | 字段 |
 | :--- | :--- |
@@ -227,11 +231,12 @@ AppController(ITempHumSensor& th,
 
 当前职责：
 
-- 初始化 LCD、温湿度传感器、气压传感器和指示灯
-- 周期性采集温湿度、气压和海拔
-- 根据阈值更新报警状态与指示灯模式
-- 处理触摸翻页和 3 个物理按键输入
-- 将遥测与状态打包为 `ILcdDisplay::RenderData`，交由显示层刷新
+- 初始化 LCD、传感器和状态灯
+- 驱动非阻塞温湿度采样与同步气压读取
+- 根据阈值更新报警状态与 LED 模式
+- 处理 3 个物理按键和触摸释放切页
+- 打包 `RenderData` 交由显示层刷新
+- 输出健康日志以及触摸/传感器边沿日志
 
 当前交互行为：
 
@@ -240,14 +245,18 @@ AppController(ITempHumSensor& th,
 - `KEY_BACK`：返回默认页面，并在已确认状态下恢复告警展示
 - 任意一次有效触摸释放均可切页
 
-调度说明：
+当前任务入口：
 
-- `App_Loop()` 持续在主循环中执行，通过任务标志调度应用步骤
-- `AppController::run()` 如保留，仅作为兼容入口；主路径拆分为传感器采样、输入处理、状态机更新和显示刷新等独立任务
-- `App_Timer_10ms_ISR()` 只负责 10ms tick 分频、置任务标志和必要的轻量扫描
-- `TOUCH_PEN` EXTI 回调只设置触摸待处理标志，由主循环下一个 tick 转为触摸事件
-- 50ms 轮询保留为兜底，只用于补观测触摸按下/释放状态，不在 ISR 中读取坐标
-- AHT20 运行期采样通过协作式状态机等待转换完成，不再用 `HAL_Delay(80)` 阻塞主循环
+- `updateLed(uint32_t elapsedMs)`
+- `scanKeys()`
+- `pollTouch()`
+- `requestTouchToggle()`
+- `processInputs()`
+- `startSensorSample(uint32_t nowMs)`
+- `stepSensors(uint32_t nowMs)`
+- `updateStateMachine()`
+- `refreshDisplay()`
+- `logHealth()`
 
 ## BSP 层接口与实现
 
@@ -279,7 +288,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 - 当前默认总线实现
 - 对应 `hi2c2`
 - 通过 `HAL_I2C_*` API 完成寄存器读写与直接读写
-- 当前真实引脚为 `PB10/PB11`
+- `init()` 作为当前对象装配的总线初始化入口保留
 
 ### `SoftI2cBsp`
 
@@ -287,9 +296,9 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 说明：
 
-- 仍保留在仓库中，作为备选总线实现（近期已优化 SDA 引脚在推挽输出与内部上拉输入模式间的动态切换以提升稳定性）
+- 仍保留在仓库中，作为备选总线实现
 - 当前不是运行路径
-- 任何重新启用动作都必须同步修订当前状态文档和 `.ioc` 配置说明
+- 重新启用时必须同步修订当前状态文档和 `.ioc` 配置说明
 
 ### `Aht20Bsp`
 
@@ -298,8 +307,8 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 说明：
 
 - 依赖 `II2cBus`
-- `init()` 负责状态读取与初始化命令
-- `read()` 负责触发测量并换算温度、湿度
+- 内部维护 `Idle / PowerWait / CalibWait / Ready / WaitConversion` 协作式状态
+- 运行期采样通过 `beginSample()` + `pollSample()` 分步完成
 
 ### `Bmp280Bsp`
 
@@ -310,6 +319,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 - 依赖 `II2cBus`
 - `init()` 负责芯片 ID 检测、标定参数读取和工作模式设置
 - `read()` 输出气压和推算海拔
+- 失败路径会通过 `SYS_LOG` 输出初始化错误
 
 ### `PwmLedBsp`
 
@@ -319,7 +329,7 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 - 当前由 `TIM3_CH3` 驱动
 - 正常状态为呼吸灯
-- 报警和已确认状态下保持高频闪烁警示
+- 告警和已确认状态下保持高频闪烁警示
 
 ### `ButtonBsp`
 
@@ -327,9 +337,9 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 说明：
 
-- 当前工程已实例化并注入 3 个物理按键
 - 当前引脚为 `PA2` / `PA3` / `PA4`
-- 按键按低电平视为有效按下，使用 20ms 消抖
+- 按键按低电平视为有效按下
+- 使用 20ms 消抖并在业务层消费一次性按下事件
 
 ### `LcdBsp`
 
@@ -338,10 +348,10 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 说明：
 
 - 当前使用 `SPI1`
-- 当前接线按 `PB5 CS`、`PB7 DC`、`PB8 RST`、`PB6 LED`
-- 负责 LCD 初始化、像素绘制、矩形填充、字符和浮点渲染（内置 `drawCenteredString` 与 `formatFloat` 辅助能力，用于规避 nano.specs 导致的 sprintf 浮点打印问题）
-- 持有 `GuiEngine*`，通过 `setGui()` 注入
-- `update(const RenderData&)` 根据 `currentViewPage` 渲染调试页面
+- 当前接线为 `PB5 CS`、`PB7 DC`、`PB8 RST`、`PB6 LED`
+- 负责 LCD 初始化、像素绘制、矩形填充、字符/整数格式化与调试页刷新
+- 通过 `setGui()` 注入 `GuiEngine`
+- `update(const RenderData&)` 当前渲染两个调试页面和统一页脚
 
 ### `GuiEngine`
 
@@ -350,8 +360,8 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 说明：
 
 - 依赖 `App::ILcdDisplay`
-- 当前提供几何绘制原语：画线、画圆、画矩形边框、画三角形
-- 不直接参与业务状态机，仅为显示层提供绘图辅助
+- 当前提供 `drawLine`、`drawCircle`、`drawRectBorder`、`drawTriangle` 等几何原语
+- 作为显示层能力补充，不直接参与业务状态机
 
 ### `TouchBsp`
 
@@ -361,8 +371,19 @@ explicit HardwareI2cBsp(I2C_HandleTypeDef* hi2c);
 
 - 实现 `App::ITouch`
 - 负责触摸按下检测、原始采样、滤波和校准映射
-- 当前引脚为 `PA8` / `PB4` / `PB3` / `PA1` / `PA0`
-- `readPosition()` 包含 bit-bang 时序、延时和多次采样，因此即使启用 `TOUCH_PEN` 中断，也只允许在主循环或调度任务中读取坐标
+- 当前引脚为 `PA8 / PB4 / PB3 / PA1 / PA0`
+- `init()` 会让 bit-bang GPIO 进入默认空闲状态
+- `setCalibration()` 可记录触摸校准参数并输出日志
+
+## 当前 GUI / 显示数据流
+
+- `AppController::refreshDisplay()` 将当前 `TelemetryData` 转换为 `ILcdDisplay::RenderData`
+- `LcdBsp::update()` 根据 `currentViewPage` 选择页面渲染逻辑
+- `GuiEngine` 负责页面中的几何绘制辅助
+- 当前页面模型：
+  - `page 0`：温湿度主视图
+  - `page 1`：气压 / 海拔主视图
+  - 公共页脚：报警状态、静默状态、页码、连接状态摘要
 
 ## 当前对象装配
 
@@ -388,11 +409,19 @@ static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
 1. `g_I2cBus.init()`
 2. `g_Lcd.setGui(&g_Gui)`
 3. `g_Touch.init()`
-4. `g_App.setup()`
+4. 启动 I2C 设备扫描并显示结果
+5. `g_App.setup()`
+
+## 当前日志行为
+
+- 启动日志：应用入口启动、触摸 BSP 初始化、I2C 扫描摘要
+- 触摸日志：按下、IRQ 释放事件入队、polling fallback 释放、切页
+- 传感器日志：AHT20 / BMP280 的通信失败与恢复
+- 健康日志：周期输出页码、连接状态、告警状态和静默状态
 
 ## 维护注意事项
 
-- 若修改当前接线、DMA、I2C 或触摸路径，先同步 [Current_Integration_Status.md](./Current_Integration_Status.md)
-- 若修改 `.ioc` 生成边界，先同步 [CubeMX_BSP_Boundary.md](./CubeMX_BSP_Boundary.md)
-- 若修改主循环周期、`SysTick` 链路、任务标志或事件队列，先同步 [Scheduling_Architecture.md](./Scheduling_Architecture.md)
+- 若修改当前接线、DMA、I2C 或触摸路径，先同步 [Status.md](./Status.md)
+- 若修改 `.ioc` 生成边界、GPIO/NVIC 配置或 ISR 边界，先同步 [Specification.md](./Specification.md)
+- 若修改接口签名、对象装配、显示数据流或任务入口，先同步本文件
 - 若只是研究替代方案，不要把研究文档中的描述误写成当前实现
