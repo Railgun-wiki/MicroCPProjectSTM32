@@ -113,6 +113,7 @@ private:
     void drawCenteredString(uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
     void renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
     void renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
+    void renderSettingsPage(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
     void renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
 };
 

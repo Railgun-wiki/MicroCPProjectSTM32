@@ -37,6 +37,93 @@ static void formatScaledInt(char* dest, const char* prefix, int32_t val, const c
     }
 }
 
+static void formatPressureKpa(char* dest, const char* prefix, uint32_t pressurePa, const char* suffix)
+{
+    const uint32_t whole = pressurePa / 1000U;
+    const uint32_t fract = (pressurePa % 1000U) / 100U;
+    sprintf(dest, "%s%lu.%01lu%s", prefix, (unsigned long)whole, (unsigned long)fract, suffix);
+}
+
+static uint16_t graphYForValue(int32_t value, int32_t minValue, int32_t maxValue,
+                               uint16_t y0, uint16_t y1)
+{
+    int32_t range = maxValue - minValue;
+    if (range <= 0) {
+        range = 1;
+    }
+
+    const uint16_t height = y1 - y0;
+    int64_t scaled = static_cast<int64_t>(value - minValue) * height / range;
+    if (scaled < 0) {
+        scaled = 0;
+    } else if (scaled > height) {
+        scaled = height;
+    }
+    return static_cast<uint16_t>(y1 - scaled);
+}
+
+static uint16_t graphXForIndex(uint8_t index, uint8_t count, uint16_t x0, uint16_t x1)
+{
+    if (count < 2) {
+        return x0;
+    }
+    return static_cast<uint16_t>(x0 + (static_cast<uint32_t>(x1 - x0) * index) / (count - 1U));
+}
+
+static void drawBoxedButton(LcdBsp& lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+                            const char* label, uint16_t fg, uint16_t bg)
+{
+    lcd.fillRect(x0, y0, x1, y1, bg);
+    lcd.gui().drawRectBorder(x0, y0, x1, y1, fg);
+    lcd.drawString(static_cast<uint16_t>(x0 + 10U), static_cast<uint16_t>(y0 + 8U), label, fg, bg, 16);
+}
+
+static void drawSeriesGraph(LcdBsp& lcd, Bsp::GuiEngine& gui, const int32_t* values,
+                            uint8_t count, uint16_t x0, uint16_t y0,
+                            uint16_t x1, uint16_t y1, int32_t minValue,
+                            int32_t maxValue, uint16_t color)
+{
+    (void)lcd;
+    if (count < 2) {
+        return;
+    }
+
+    uint16_t lastX = graphXForIndex(0, count, x0, x1);
+    uint16_t lastY = graphYForValue(values[0], minValue, maxValue, y0, y1);
+
+    for (uint8_t i = 1; i < count; ++i) {
+        const uint16_t nextX = graphXForIndex(i, count, x0, x1);
+        const uint16_t nextY = graphYForValue(values[i], minValue, maxValue, y0, y1);
+        gui.drawLine(lastX, lastY, nextX, nextY, color);
+        lastX = nextX;
+        lastY = nextY;
+    }
+}
+
+static void drawSeriesGraph(LcdBsp& lcd, Bsp::GuiEngine& gui, const uint32_t* values,
+                            uint8_t count, uint16_t x0, uint16_t y0,
+                            uint16_t x1, uint16_t y1, uint32_t minValue,
+                            uint32_t maxValue, uint16_t color)
+{
+    (void)lcd;
+    if (count < 2) {
+        return;
+    }
+
+    const int32_t minVal32 = static_cast<int32_t>(minValue);
+    const int32_t maxVal32 = static_cast<int32_t>(maxValue);
+    uint16_t lastX = graphXForIndex(0, count, x0, x1);
+    uint16_t lastY = graphYForValue(static_cast<int32_t>(values[0]), minVal32, maxVal32, y0, y1);
+
+    for (uint8_t i = 1; i < count; ++i) {
+        const uint16_t nextX = graphXForIndex(i, count, x0, x1);
+        const uint16_t nextY = graphYForValue(static_cast<int32_t>(values[i]), minVal32, maxVal32, y0, y1);
+        gui.drawLine(lastX, lastY, nextX, nextY, color);
+        lastX = nextX;
+        lastY = nextY;
+    }
+}
+
 } // namespace
 
 LcdBsp::LcdBsp(SPI_HandleTypeDef* hspi,
@@ -406,8 +493,10 @@ void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
     // 2. 根据不同的调试页面，渲染核心环境传感器状态
     if (data.currentViewPage == 0) {
         renderDebuggingPage0(data, forceRedraw);
-    } else {
+    } else if (data.currentViewPage == 1) {
         renderDebuggingPage1(data, forceRedraw);
+    } else {
+        renderSettingsPage(data, forceRedraw);
     }
 
     // 3. 渲染底部调试控制信息栏 (报警、静音和当前页码)
@@ -417,47 +506,63 @@ void LcdBsp::update(const App::ILcdDisplay::RenderData& data)
 void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
 {
     char buf[64];
+    const uint16_t graphX0 = 20;
+    const uint16_t graphY0 = 60;
+    const uint16_t graphX1 = 460;
+    const uint16_t graphY1 = 170;
 
-    // --- 温湿度传感器数据调试行 ---
+    fillRect(graphX0, graphY0, graphX1, graphY1, kColorBlack);
+    m_gui->drawRectBorder(graphX0, graphY0, graphX1, graphY1, kColorGray);
+
+    if (!data.tempHumConnected || data.historyCount < 2) {
+        drawCenteredString(110, "TEMP/HUMI GRAPH WAITING", kColorGray, kColorBlack, 16);
+    } else {
+        int32_t minValue = data.tempHistory[0];
+        int32_t maxValue = data.tempHistory[0];
+        for (uint8_t i = 1; i < data.historyCount; ++i) {
+            minValue = (data.tempHistory[i] < minValue) ? data.tempHistory[i] : minValue;
+            maxValue = (data.tempHistory[i] > maxValue) ? data.tempHistory[i] : maxValue;
+        }
+        minValue = (data.tempLowLimit < minValue) ? data.tempLowLimit : minValue;
+        maxValue = (data.tempHighLimit > maxValue) ? data.tempHighLimit : maxValue;
+        if (maxValue - minValue < 20) {
+            maxValue = minValue + 20;
+        }
+        drawSeriesGraph(*this, *m_gui, data.tempHistory, data.historyCount,
+                        graphX0 + 1U, graphY0 + 1U, graphX1 - 1U, graphY1 - 1U,
+                        minValue, maxValue, kColorRed);
+    }
+
     bool connChanged = (data.tempHumConnected != m_lastTempHumConn);
     if (forceRedraw || connChanged) {
         if (!data.tempHumConnected) {
-            drawCenteredString(80, "TEMP: Unconnected", kColorRed, kColorBlack, 16);
-            drawCenteredString(110, "", kColorBlack, kColorBlack, 16);
-            drawCenteredString(150, "HUMI: Unconnected", kColorRed, kColorBlack, 16);
-            drawCenteredString(180, "", kColorBlack, kColorBlack, 16);
+            drawCenteredString(190, "TEMP/HUMI: Unconnected", kColorRed, kColorBlack, 16);
         }
         m_lastTempHumConn = data.tempHumConnected;
-        // 重置缓存，确保传感器重新连接后立即刷新数值
         m_lastTemp = -9999;
         m_lastHum = -9999;
     }
 
     if (data.tempHumConnected) {
-        // --- 温度 ---
         if (forceRedraw || data.temperature != m_lastTemp) {
             formatScaledInt(buf, "TEMP: ", data.temperature, " C", 10);
-            drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
+            drawString(20, 190, buf, kColorWhite, kColorBlack, 16);
             m_lastTemp = data.temperature;
         }
 
         if (forceRedraw) {
-            char lowBuf[20], highBuf[20];
+            char lowBuf[20];
+            char highBuf[20];
             formatScaledInt(lowBuf, "", data.tempLowLimit, "", 10);
             formatScaledInt(highBuf, "", data.tempHighLimit, "", 10);
             sprintf(buf, "TEMP LIMIT: %s ~ %s C", lowBuf, highBuf);
-            drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
+            drawString(20, 232, buf, kColorGray, kColorBlack, 16);
         }
 
-        // --- 湿度 ---
         if (forceRedraw || data.humidity != m_lastHum) {
             formatScaledInt(buf, "HUMI: ", data.humidity, " %", 10);
-            drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
+            drawString(20, 210, buf, kColorWhite, kColorBlack, 16);
             m_lastHum = data.humidity;
-        }
-
-        if (forceRedraw) {
-            drawCenteredString(180, "HUMI LIMIT: 0.0 ~ 100.0 %", kColorGray, kColorBlack, 16);
         }
     }
 }
@@ -465,46 +570,111 @@ void LcdBsp::renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool
 void LcdBsp::renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
 {
     char buf[64];
+    const uint16_t graphX0 = 20;
+    const uint16_t graphY0 = 60;
+    const uint16_t graphX1 = 460;
+    const uint16_t graphY1 = 170;
 
-    // --- 气压传感器数据调试行 ---
+    fillRect(graphX0, graphY0, graphX1, graphY1, kColorBlack);
+    m_gui->drawRectBorder(graphX0, graphY0, graphX1, graphY1, kColorGray);
+
+    if (!data.pressureConnected || data.historyCount < 2) {
+        drawCenteredString(110, "PRESSURE GRAPH WAITING", kColorGray, kColorBlack, 16);
+    } else {
+        uint32_t minValue = data.pressHistory[0];
+        uint32_t maxValue = data.pressHistory[0];
+        for (uint8_t i = 1; i < data.historyCount; ++i) {
+            minValue = (data.pressHistory[i] < minValue) ? data.pressHistory[i] : minValue;
+            maxValue = (data.pressHistory[i] > maxValue) ? data.pressHistory[i] : maxValue;
+        }
+        minValue = (data.pressLowLimit < minValue) ? data.pressLowLimit : minValue;
+        maxValue = (data.pressHighLimit > maxValue) ? data.pressHighLimit : maxValue;
+        if (maxValue <= minValue) {
+            maxValue = minValue + 1000U;
+        }
+        drawSeriesGraph(*this, *m_gui, data.pressHistory, data.historyCount,
+                        graphX0 + 1U, graphY0 + 1U, graphX1 - 1U, graphY1 - 1U,
+                        minValue, maxValue, kColorBlue);
+    }
+
     bool connChanged = (data.pressureConnected != m_lastPressConn);
     if (forceRedraw || connChanged) {
         if (!data.pressureConnected) {
-            drawCenteredString(80, "PRES: Unconnected", kColorRed, kColorBlack, 16);
-            drawCenteredString(110, "", kColorBlack, kColorBlack, 16);
-            drawCenteredString(150, "ALTI: Unconnected", kColorRed, kColorBlack, 16);
-            drawCenteredString(180, "", kColorBlack, kColorBlack, 16);
+            drawCenteredString(190, "PRESSURE: Unconnected", kColorRed, kColorBlack, 16);
         }
         m_lastPressConn = data.pressureConnected;
-        // 重置缓存，确保传感器重新连接后立即刷新数值
         m_lastPress = 0;
         m_lastAlt = -9999;
     }
 
     if (data.pressureConnected) {
-        // --- 大气压强 ---
         if (forceRedraw || data.pressure != m_lastPress) {
-            sprintf(buf, "PRES: %lu Pa", (unsigned long)data.pressure);
-            drawCenteredString(80, buf, kColorWhite, kColorBlack, 16);
+            formatPressureKpa(buf, "PRES: ", data.pressure, " kPa");
+            drawString(20, 190, buf, kColorWhite, kColorBlack, 16);
             m_lastPress = data.pressure;
         }
 
         if (forceRedraw) {
-            sprintf(buf, "PRES LIMIT: %lu ~ %lu Pa", (unsigned long)data.pressLowLimit, (unsigned long)data.pressHighLimit);
-            drawCenteredString(110, buf, kColorGray, kColorBlack, 16);
+            char lowBuf[32];
+            char highBuf[32];
+            formatPressureKpa(lowBuf, "PRES LIMIT: ", data.pressLowLimit, " ~ ");
+            formatPressureKpa(highBuf, "", data.pressHighLimit, " kPa");
+            sprintf(buf, "%s%s", lowBuf, highBuf);
+            drawString(20, 232, buf, kColorGray, kColorBlack, 16);
         }
 
-        // --- 海拔 ---
         if (forceRedraw || data.altitude != m_lastAlt) {
             formatScaledInt(buf, "ALTI: ", data.altitude, " m", 10);
-            drawCenteredString(150, buf, kColorWhite, kColorBlack, 16);
+            drawString(20, 210, buf, kColorWhite, kColorBlack, 16);
             m_lastAlt = data.altitude;
         }
-
-        if (forceRedraw) {
-            drawCenteredString(180, "ALTI CALC: LUT Int32", kColorGray, kColorBlack, 16);
-        }
     }
+}
+
+void LcdBsp::renderSettingsPage(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
+{
+    (void)forceRedraw;
+
+    char buf[64];
+    const char* labels[4] = {"TEMP HIGH", "TEMP LOW", "PRESS HIGH", "PRESS LOW"};
+
+    for (uint8_t row = 0; row < 4; ++row) {
+        const uint16_t rowY0 = static_cast<uint16_t>(60U + row * 42U);
+        const uint16_t rowY1 = static_cast<uint16_t>(rowY0 + 32U);
+        fillRect(20, rowY0, 460, rowY1, kColorBlack);
+        m_gui->drawRectBorder(20, rowY0, 460, rowY1, kColorGray);
+
+        if (data.selectedThresholdField == row) {
+            m_gui->drawRectBorder(18, rowY0 - 2U, 462, rowY1 + 2U, kColorYellow);
+        }
+
+        drawString(24, rowY0 + 8U, labels[row], kColorWhite, kColorBlack, 16);
+
+        switch (row) {
+            case 0:
+                formatScaledInt(buf, "", data.pendingTempHighLimit, " C", 10);
+                break;
+            case 1:
+                formatScaledInt(buf, "", data.pendingTempLowLimit, " C", 10);
+                break;
+            case 2:
+                formatPressureKpa(buf, "", data.pendingPressHighLimit, " kPa");
+                break;
+            case 3:
+                formatPressureKpa(buf, "", data.pendingPressLowLimit, " kPa");
+                break;
+            default:
+                buf[0] = '\0';
+                break;
+        }
+
+        drawString(220, rowY0 + 8U, buf, kColorWhite, kColorBlack, 16);
+        drawBoxedButton(*this, 360, rowY0, 388, rowY1, "-", kColorWhite, kColorBlue);
+        drawBoxedButton(*this, 400, rowY0, 428, rowY1, "+", kColorWhite, kColorBlue);
+    }
+
+    drawBoxedButton(*this, 40, 250, 190, 288, "CONFIRM", kColorGreen, kColorBlack);
+    drawBoxedButton(*this, 300, 250, 450, 288, "CANCEL", kColorWhite, kColorRed);
 }
 
 void LcdBsp::renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, bool forceRedraw)
@@ -512,6 +682,14 @@ void LcdBsp::renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, boo
     char buf[40];
 
     // --- 渲染报警状态指示栏 ---
+    if (data.currentViewPage == 2) {
+        if (forceRedraw) {
+            sprintf(buf, "PAGE: %d/3", data.currentViewPage + 1);
+            drawString(390, 15, buf, kColorYellow, kColorBlack, 16);
+        }
+        return;
+    }
+
     if (forceRedraw || data.alarmState != m_lastAlarmState || data.isMuted != m_lastMute) {
         drawString(20, 220, "--------------------------------", kColorGray, kColorBlack, 16);
         
@@ -549,9 +727,13 @@ void LcdBsp::renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, boo
         m_lastMute = data.isMuted;
     }
 
+    if (forceRedraw) {
+        drawBoxedButton(*this, 20, 276, 220, 312, "SETTINGS", kColorWhite, kColorBlack);
+    }
+
     // --- 渲染页面页码栏 ---
     if (forceRedraw) {
-        sprintf(buf, "PAGE: %d/2", data.currentViewPage + 1);
+        sprintf(buf, "PAGE: %d/3", data.currentViewPage + 1);
         drawString(390, 15, buf, kColorYellow, kColorBlack, 16);
     }
 }

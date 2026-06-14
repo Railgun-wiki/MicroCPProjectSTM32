@@ -60,11 +60,22 @@ public:
         uint32_t pressLowLimit;   ///< 气压报警下限值 (Pa)
 
         Sys::AlarmState alarmState; ///< 系统当前的报警状态
-        uint8_t currentViewPage;  ///< 当前活动的分页页码 (0 或 1)
+        uint8_t currentViewPage;  ///< 当前活动的分页页码 (0, 1 或 2)
         bool isMuted;             ///< 告警展示是否已被确认/抑制
 
         bool tempHumConnected;    ///< 温湿度传感器是否已连接
         bool pressureConnected;   ///< 气压传感器是否已连接
+
+        static constexpr uint8_t kGraphHistorySize = 30;
+        int32_t tempHistory[kGraphHistorySize];
+        uint32_t pressHistory[kGraphHistorySize];
+        uint8_t historyCount;
+
+        uint8_t selectedThresholdField; ///< 当前阈值设置页中最后触控的字段索引
+        int32_t pendingTempHighLimit;   ///< 阈值设置页中温度上限的预览值
+        int32_t pendingTempLowLimit;    ///< 阈值设置页中温度下限的预览值
+        uint32_t pendingPressHighLimit; ///< 阈值设置页中气压上限的预览值
+        uint32_t pendingPressLowLimit;  ///< 阈值设置页中气压下限的预览值
     };
 
     /**

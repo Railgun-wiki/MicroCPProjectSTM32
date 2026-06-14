@@ -44,7 +44,7 @@ public:
         uint32_t pressLowLimit{98000};   // 980 hPa
         
         Sys::AlarmState alarmState{Sys::AlarmState::NORMAL};
-        uint8_t currentViewPage{0}; // 0: 温湿大屏, 1: 气压海拔
+        uint8_t currentViewPage{0}; // 0: 温湿大屏, 1: 气压海拔, 2: 阈值设置
         bool isMuted{false}; // 当前用于表示“告警展示已被确认/抑制”
     };
 
@@ -56,6 +56,10 @@ public:
     void setPressureLimits(uint32_t high, uint32_t low);
 
 private:
+    static constexpr uint8_t kHistorySize = 30;
+    static constexpr int32_t kTempStep = 1;       // 0.1 C
+    static constexpr uint32_t kPressStep = 100;   // 0.1 kPa
+
     ITempHumSensor& m_th;
     IPressureSensor& m_press;
     IIndicator& m_led;
@@ -74,7 +78,26 @@ private:
     bool m_touchObservedPressed{false};
     bool m_tempHumSampleActive{false};
     bool m_touchPressLogged{false};
+    bool m_lastTouchPointValid{false};
+    TouchPoint m_lastTouchPoint{0, 0, false};
 
+    uint8_t m_previousPage{0};
+    int32_t m_pendingTempHighLimit{350};
+    int32_t m_pendingTempLowLimit{100};
+    uint32_t m_pendingPressHighLimit{103000};
+    uint32_t m_pendingPressLowLimit{98000};
+    uint8_t m_selectedThresholdField{0};
+
+    int32_t m_tempHistory[kHistorySize]{};
+    uint32_t m_pressHistory[kHistorySize]{};
+    uint8_t m_historyCount{0};
+
+    void appendHistory(int32_t temperature, uint32_t pressure);
+    void enterThresholdPage();
+    void applyPendingThresholds();
+    void cancelPendingThresholds();
+    void updatePendingThreshold(uint8_t field, bool increase);
+    void handleTouchPoint(const TouchPoint& pt);
 };
 
 } // namespace App
