@@ -1,5 +1,9 @@
 # FPGA LCD 透传配置说明
 
+> 配置说明文档，不是当前 MCU 固件行为的完整说明。
+>
+> 本文只覆盖 FPGA 透传接线与约束。若需确认 STM32 固件当前如何使用 LCD、触摸和 I2C2，请先参考 [Current_Integration_Status.md](./Current_Integration_Status.md)。
+
 ## 概述
 
 开发板上的 FPGA 作为 STM32 ARM 芯片与 LCD 底板连接器之间的**纯信号透传**模块。FPGA 内部没有任何逻辑、缓存或信号变换 -- ARM 侧的每个信号都直接连线到对应的 LCD 侧引脚。
@@ -103,12 +107,12 @@ set_property PACKAGE_PIN M22  [get_ports SDI_BASE]
 | PA5 | SPI1_SCK |
 | PA6 | SPI1_MISO（可保留，LCD 不读取也可不接） |
 | PA7 | SPI1_MOSI |
-| PB9 | LCD_CS |
+| PB5 | LCD_CS |
 | PB7 | LCD_DC/RS |
 | PB8 | LCD_RST |
 | PB6 | LCD_LED（背光） |
 
-注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB9/PB7/PB8/PB6）由 `LcdBsp::init()` 方法初始化。
+注意：STM32 的 SPI 引脚（PA5/PA7）由 CubeMX 配置为复用推挽输出。GPIO 控制引脚（PB5/PB7/PB8/PB6）由 `LcdBsp::init()` 方法初始化。
 
 ## SPI 配置
 

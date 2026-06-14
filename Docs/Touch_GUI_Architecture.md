@@ -1,5 +1,11 @@
 # F103C8 触屏 GUI 架构方案对比
 
+> 研究文档，非当前实现说明。
+>
+> 当前工程已经落地的是 `LcdBsp + TouchBsp + AppController` 的轻量集成路径，请先参考 [Current_Integration_Status.md](./Current_Integration_Status.md)。
+> 涉及触摸轮询、`TOUCH_PEN` 中断、任务标志和事件队列的调度取舍，请参考 [Scheduling_Architecture.md](./Scheduling_Architecture.md)。
+> 本文保留为触摸 GUI 的架构比较和未来演进预案，其中提到的 FPGA 协处理、控件体系和资源预算并不等同于当前仓库行为。
+
 ## 约束条件
 
 | 资源 | F103C8 可用量 |
