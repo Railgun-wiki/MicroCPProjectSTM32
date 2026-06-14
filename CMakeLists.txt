@@ -57,6 +57,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     App/Src/AppController.cpp
     App/Src/app_entry.cpp
+    App/Src/AppGui.cpp
+    App/Src/GuiEngine.cpp
     BSP/Src/SoftI2cBsp.cpp
     BSP/Src/HardwareI2cBsp.cpp
     BSP/Src/Aht20Bsp.cpp
@@ -65,7 +67,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/Src/MathTables.cpp
     BSP/Src/ButtonBsp.cpp
     BSP/Src/LcdBsp.cpp
-    BSP/Src/GuiEngine.cpp
     BSP/Src/TouchBsp.cpp
 )
 

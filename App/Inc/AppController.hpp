@@ -4,8 +4,8 @@
 #include "IPressureSensor.hpp"
 #include "IIndicator.hpp"
 #include "IButton.hpp"
-#include "ILcdDisplay.hpp"
 #include "ITouch.hpp"
+#include "AppGui.hpp"
 #include "sys.hpp"
 
 namespace App {
@@ -13,7 +13,7 @@ namespace App {
 class AppController {
 public:
     // 依赖注入：在构造时引入所有解耦后的虚接口引用，彻底隔绝底层硬件实现
-    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, ILcdDisplay& lcd, ITouch& touch);
+    AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, AppGui& gui, ITouch& touch);
     
     // 初始化应用控制器，复位状态机与传感器参数
     void setup();
@@ -23,8 +23,8 @@ public:
     void updateLed(uint32_t elapsedMs);
     void scanKeys();
     void processInputs();
-    void pollTouch();
-    void requestTouchToggle();
+    void pollTouch(uint32_t nowMs);
+    void renderGuiTick();
     void startSensorSample(uint32_t nowMs);
     void stepSensors(uint32_t nowMs);
     void updateStateMachine();
@@ -66,7 +66,7 @@ private:
     IButton& m_keyPage;
     IButton& m_keyConfirm;
     IButton& m_keyBack;
-    ILcdDisplay& m_lcd;
+    AppGui& m_gui;
     ITouch& m_touch;
 
     TelemetryData m_data;
@@ -74,12 +74,7 @@ private:
     // 传感器连接状态追踪
     bool m_tempHumConnected{false};
     bool m_pressureConnected{false};
-    bool m_touchToggleRequested{false};
-    bool m_touchObservedPressed{false};
     bool m_tempHumSampleActive{false};
-    bool m_touchPressLogged{false};
-    bool m_lastTouchPointValid{false};
-    TouchPoint m_lastTouchPoint{0, 0, false};
 
     uint8_t m_previousPage{0};
     int32_t m_pendingTempHighLimit{350};
@@ -92,12 +87,13 @@ private:
     uint32_t m_pressHistory[kHistorySize]{};
     uint8_t m_historyCount{0};
 
+    AppGui::Model buildGuiModel() const;
+    void handleGuiCommand(const AppGui::Command& command);
     void appendHistory(int32_t temperature, uint32_t pressure);
     void enterThresholdPage();
     void applyPendingThresholds();
     void cancelPendingThresholds();
     void updatePendingThreshold(uint8_t field, bool increase);
-    void handleTouchPoint(const TouchPoint& pt);
 };
 
 } // namespace App

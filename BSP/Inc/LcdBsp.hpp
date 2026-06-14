@@ -5,13 +5,10 @@
 
 namespace Bsp {
 
-// 前置声明
-class GuiEngine;
-
 /**
  * @brief 基于 ST7796S 驱动芯片的 4寸 SPI TFT LCD BSP 驱动实现类
  * 
- * 实现了 App::ILcdDisplay 接口，内部实现了底层 SPI 传输和调试文本渲染逻辑。
+ * 实现了 App::ILcdDisplay 接口，内部只保留底层 SPI 传输和基础绘制 primitive。
  * 物理引脚采用参数化配置，免除由于 CubeMX 生成代码带来的强耦合及硬件冲突问题。
  */
 class LcdBsp : public App::ILcdDisplay {
@@ -40,19 +37,12 @@ public:
     void fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) override;
     uint16_t getWidth() const override { return m_width; }
     uint16_t getHeight() const override { return m_height; }
-    void update(const App::ILcdDisplay::RenderData& data) override;
+    void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size) override;
 
     // 文本渲染（需要 SPI 寄存器级批量写入优化，保留在硬件层）
     void drawChar(uint16_t x, uint16_t y, char c, uint16_t fc, uint16_t bc, uint8_t size);
-    void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
     void drawScaledInt(uint16_t x, uint16_t y, int32_t value, uint8_t intDigits,
                        uint8_t fracDigits, uint16_t fc, uint16_t bc, uint8_t size);
-
-    // 访问内部几何绘图引擎
-    GuiEngine& gui() { return *m_gui; }
-
-    // 注入 GuiEngine（由 app_entry.cpp 在构造后调用）
-    void setGui(GuiEngine* gui) { m_gui = gui; }
 
 private:
     SPI_HandleTypeDef* m_hspi;
@@ -68,29 +58,6 @@ private:
     // 管理 LCD 的宽度和高度参数 (ST7796S 横屏: 480x320)
     uint16_t m_width{480};
     uint16_t m_height{320};
-
-    // 缓存上一次渲染的关键数据，用于局部刷新防止闪烁
-    uint8_t m_lastPage{255};
-    int32_t m_lastTemp{-9999};
-    int32_t m_lastHum{-9999};
-    uint32_t m_lastPress{0};
-    int32_t m_lastAlt{-9999};
-    Sys::AlarmState m_lastAlarmState{Sys::AlarmState::NORMAL};
-    bool m_lastMute{false};
-    bool m_lastTempHumConn{true};
-    bool m_lastPressConn{true};
-
-    // 几何绘图引擎（纯算法，不含 HAL 依赖）
-    GuiEngine* m_gui{nullptr};
-
-    // 常用调试画笔/背景色定义
-    static constexpr uint16_t kColorBlack = 0x0000;
-    static constexpr uint16_t kColorWhite = 0xFFFF;
-    static constexpr uint16_t kColorBlue  = 0x001F;
-    static constexpr uint16_t kColorRed   = 0xF800;
-    static constexpr uint16_t kColorGreen = 0x07E0;
-    static constexpr uint16_t kColorYellow= 0xFFE0;
-    static constexpr uint16_t kColorGray  = 0x8430;
 
     // 底层物理信号操作
     void csLow();
@@ -109,12 +76,6 @@ private:
     void setAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
     void reset();
 
-    // 局部渲染方法 (调试专用)
-    void drawCenteredString(uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size);
-    void renderDebuggingPage0(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
-    void renderDebuggingPage1(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
-    void renderSettingsPage(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
-    void renderDebuggingFooter(const App::ILcdDisplay::RenderData& data, bool forceRedraw);
 };
 
 } // namespace Bsp

@@ -8,9 +8,9 @@
 #include "PwmLedBsp.hpp"
 #include "ButtonBsp.hpp"
 #include "LcdBsp.hpp"
-#include "GuiEngine.hpp"
 #include "TouchBsp.hpp"
 #include "AppController.hpp"
+#include "AppGui.hpp"
 
 #include <stdio.h>
 
@@ -41,9 +41,9 @@ static Bsp::TouchBsp g_Touch(TOUCH_TCLK_GPIO_Port, TOUCH_TCLK_Pin,
                              TOUCH_DOUT_GPIO_Port, TOUCH_DOUT_Pin,
                              TOUCH_PEN_GPIO_Port,  TOUCH_PEN_Pin);
 
-static Bsp::GuiEngine g_Gui(g_Lcd);
+static App::AppGui g_AppGui(g_Lcd);
 static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
-                                g_KeyPage, g_KeyConfirm, g_KeyBack, g_Lcd, g_Touch);
+                                g_KeyPage, g_KeyConfirm, g_KeyBack, g_AppGui, g_Touch);
 
 namespace {
 
@@ -51,12 +51,12 @@ struct AppTaskFlags {
     volatile uint8_t ledUpdate{0};
     volatile uint8_t keyScan{0};
     volatile uint8_t inputProcess{0};
-    volatile uint8_t touchEvent{0};
     volatile uint8_t touchPoll{0};
     volatile uint8_t sensorStart{0};
     volatile uint8_t sensorStep{0};
     volatile uint8_t stateUpdate{0};
     volatile uint8_t uiRefresh{0};
+    volatile uint8_t guiRender{0};
     volatile uint8_t healthLog{0};
 };
 
@@ -64,17 +64,16 @@ struct AppTaskSnapshot {
     uint8_t ledUpdate;
     uint8_t keyScan;
     uint8_t inputProcess;
-    uint8_t touchEvent;
     uint8_t touchPoll;
     uint8_t sensorStart;
     uint8_t sensorStep;
     uint8_t stateUpdate;
     uint8_t uiRefresh;
+    uint8_t guiRender;
     uint8_t healthLog;
 };
 
 AppTaskFlags g_taskFlags;
-volatile uint8_t g_touchIrqPending = 0;
 
 } // namespace
 
@@ -83,15 +82,11 @@ void App_Init(void)
     SYS_LOG("Booting C++ application entry point...");
 
     g_I2cBus.init();
-    g_Lcd.setGui(&g_Gui);
     const bool touchReady = g_Touch.init();
     SYS_LOG("Touch BSP init: %s", touchReady ? "ready" : "failed");
 
     // Diagnostic I2C scanner on boot
     g_Lcd.init();
-    g_Lcd.clear(0x0000); // Clear to Black
-    g_Lcd.drawString(20, 30, "MicroCP Sensor Monitor", 0xFFE0, 0x0000, 16);
-    g_Lcd.drawString(20, 55, "Scanning I2C2 Bus...", 0xFFFF, 0x0000, 16);
 
     bool aht20Connected = false;
     bool bmp280Connected = false;
@@ -110,13 +105,7 @@ void App_Init(void)
             aht20Connected ? "connected" : "missing",
             bmp280Connected ? "connected" : "missing");
 
-    char lineBuf[48];
-    sprintf(lineBuf, "GROUP: %lu", (unsigned long)SYS_GROUP_NUMBER);
-    g_Lcd.drawString(20, 85, lineBuf, 0x07E0, 0x0000, 16);
-    sprintf(lineBuf, "AHT20: %s", aht20Connected ? "Connected" : "Unconnected");
-    g_Lcd.drawString(20, 120, lineBuf, aht20Connected ? 0x07E0 : 0xF800, 0x0000, 16);
-    sprintf(lineBuf, "BMP280: %s", bmp280Connected ? "Connected" : "Unconnected");
-    g_Lcd.drawString(20, 150, lineBuf, bmp280Connected ? 0x07E0 : 0xF800, 0x0000, 16);
+    g_AppGui.renderBootScan(SYS_GROUP_NUMBER, aht20Connected, bmp280Connected);
     HAL_Delay(2000); // Show for 2 seconds
 
     g_App.setup();
@@ -124,6 +113,7 @@ void App_Init(void)
     g_taskFlags.sensorStep = 1;
     g_taskFlags.stateUpdate = 1;
     g_taskFlags.uiRefresh = 1;
+    g_taskFlags.guiRender = 1;
     g_taskFlags.healthLog = 1;
 
     SYS_LOG("C++ application initialized successfully.");
@@ -136,23 +126,23 @@ void App_Loop(void)
     snapshot.ledUpdate = g_taskFlags.ledUpdate;
     snapshot.keyScan = g_taskFlags.keyScan;
     snapshot.inputProcess = g_taskFlags.inputProcess;
-    snapshot.touchEvent = g_taskFlags.touchEvent;
     snapshot.touchPoll = g_taskFlags.touchPoll;
     snapshot.sensorStart = g_taskFlags.sensorStart;
     snapshot.sensorStep = g_taskFlags.sensorStep;
     snapshot.stateUpdate = g_taskFlags.stateUpdate;
     snapshot.uiRefresh = g_taskFlags.uiRefresh;
+    snapshot.guiRender = g_taskFlags.guiRender;
     snapshot.healthLog = g_taskFlags.healthLog;
 
     g_taskFlags.ledUpdate = 0;
     g_taskFlags.keyScan = 0;
     g_taskFlags.inputProcess = 0;
-    g_taskFlags.touchEvent = 0;
     g_taskFlags.touchPoll = 0;
     g_taskFlags.sensorStart = 0;
     g_taskFlags.sensorStep = 0;
     g_taskFlags.stateUpdate = 0;
     g_taskFlags.uiRefresh = 0;
+    g_taskFlags.guiRender = 0;
     g_taskFlags.healthLog = 0;
     Sys::ExitCritical();
 
@@ -164,11 +154,8 @@ void App_Loop(void)
     if (snapshot.keyScan) {
         g_App.scanKeys();
     }
-    if (snapshot.touchEvent) {
-        g_App.requestTouchToggle();
-    }
     if (snapshot.touchPoll) {
-        g_App.pollTouch();
+        g_App.pollTouch(nowMs);
     }
     if (snapshot.inputProcess) {
         g_App.processInputs();
@@ -185,6 +172,9 @@ void App_Loop(void)
     if (snapshot.uiRefresh) {
         g_App.refreshDisplay();
     }
+    if (snapshot.guiRender) {
+        g_App.renderGuiTick();
+    }
     if (snapshot.healthLog) {
         g_App.logHealth();
     }
@@ -193,7 +183,6 @@ void App_Loop(void)
 void App_Timer_10ms_ISR(void)
 {
     static uint32_t inputDivider = 0;
-    static uint32_t touchDivider = 0;
     static uint32_t sensorStartDivider = 0;
     static uint32_t stateDivider = 0;
     static uint32_t uiDivider = 0;
@@ -202,18 +191,12 @@ void App_Timer_10ms_ISR(void)
     g_taskFlags.ledUpdate = 1;
     g_taskFlags.keyScan = 1;
     g_taskFlags.sensorStep = 1;
+    g_taskFlags.guiRender = 1;
+    g_taskFlags.touchPoll = 1;
 
     if (++inputDivider >= 2U) {
         inputDivider = 0;
         g_taskFlags.inputProcess = 1;
-    }
-    if (g_touchIrqPending != 0U) {
-        g_touchIrqPending = 0U;
-        g_taskFlags.touchEvent = 1;
-    }
-    if (++touchDivider >= 5U) {
-        touchDivider = 0;
-        g_taskFlags.touchPoll = 1;
     }
     if (++sensorStartDivider >= 50U) {
         sensorStartDivider = 0;
@@ -235,5 +218,5 @@ void App_Timer_10ms_ISR(void)
 
 void App_TouchPen_ISR(void)
 {
-    g_touchIrqPending = 1U;
+    // Touch is sampled by the 10ms polling task; no IRQ-side work is required.
 }

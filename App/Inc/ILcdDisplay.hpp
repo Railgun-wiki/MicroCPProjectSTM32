@@ -1,6 +1,6 @@
 // App/Inc/ILcdDisplay.hpp
 #pragma once
-#include "sys.hpp"
+#include <stdint.h>
 
 namespace App {
 
@@ -46,43 +46,9 @@ public:
     virtual uint16_t getHeight() const = 0;
 
     /**
-     * @brief LCD 渲染的解耦遥测数据包
+     * @brief 绘制 ASCII 字符串。
      */
-    struct RenderData {
-        int32_t temperature;      ///< 实时环境温度 (放大10倍)
-        int32_t humidity;         ///< 实时环境湿度 (放大10倍)
-        uint32_t pressure;        ///< 实时大气压强 (Pa)
-        int32_t altitude;         ///< 测算海拔高度 (放大10倍)
-
-        int32_t tempHighLimit;    ///< 温度报警上限值 (放大10倍)
-        int32_t tempLowLimit;     ///< 温度报警下限值 (放大10倍)
-        uint32_t pressHighLimit;  ///< 气压报警上限值 (Pa)
-        uint32_t pressLowLimit;   ///< 气压报警下限值 (Pa)
-
-        Sys::AlarmState alarmState; ///< 系统当前的报警状态
-        uint8_t currentViewPage;  ///< 当前活动的分页页码 (0, 1 或 2)
-        bool isMuted;             ///< 告警展示是否已被确认/抑制
-
-        bool tempHumConnected;    ///< 温湿度传感器是否已连接
-        bool pressureConnected;   ///< 气压传感器是否已连接
-
-        static constexpr uint8_t kGraphHistorySize = 30;
-        int32_t tempHistory[kGraphHistorySize];
-        uint32_t pressHistory[kGraphHistorySize];
-        uint8_t historyCount;
-
-        uint8_t selectedThresholdField; ///< 当前阈值设置页中最后触控的字段索引
-        int32_t pendingTempHighLimit;   ///< 阈值设置页中温度上限的预览值
-        int32_t pendingTempLowLimit;    ///< 阈值设置页中温度下限的预览值
-        uint32_t pendingPressHighLimit; ///< 阈值设置页中气压上限的预览值
-        uint32_t pendingPressLowLimit;  ///< 阈值设置页中气压下限的预览值
-    };
-
-    /**
-     * @brief 定期更新和刷新 LCD 显示内容
-     * @param data 最新获取的遥测和系统状态数据
-     */
-    virtual void update(const RenderData& data) = 0;
+    virtual void drawString(uint16_t x, uint16_t y, const char* str, uint16_t fc, uint16_t bc, uint8_t size) = 0;
 };
 
 } // namespace App

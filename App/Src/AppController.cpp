@@ -3,36 +3,16 @@
 #include "stm32f1xx_hal.h"
 #include <stdlib.h>
 
-namespace {
-
-constexpr uint16_t kSettingsButtonX0 = 20;
-constexpr uint16_t kSettingsButtonX1 = 220;
-constexpr uint16_t kSettingsButtonY0 = 245;
-constexpr uint16_t kSettingsButtonY1 = 300;
-constexpr uint16_t kPageToggleMarginY = 230;
-constexpr uint16_t kThresholdRowHeight = 42;
-constexpr uint8_t kThresholdRowCount = 4;
-constexpr uint16_t kThresholdRowXMinus = 360;
-constexpr uint16_t kThresholdRowXPlus = 400;
-constexpr uint16_t kThresholdControlY0 = 250;
-constexpr uint16_t kThresholdControlY1 = 295;
-constexpr uint16_t kConfirmButtonX0 = 40;
-constexpr uint16_t kConfirmButtonX1 = 190;
-constexpr uint16_t kCancelButtonX0 = 300;
-constexpr uint16_t kCancelButtonX1 = 450;
-
-} // namespace
-
 namespace App {
 
-AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, ILcdDisplay& lcd, ITouch& touch)
+AppController::AppController(ITempHumSensor& th, IPressureSensor& press, IIndicator& led, IButton& keyPage, IButton& keyConfirm, IButton& keyBack, AppGui& gui, ITouch& touch)
     : m_th(th)
     , m_press(press)
     , m_led(led)
     , m_keyPage(keyPage)
     , m_keyConfirm(keyConfirm)
     , m_keyBack(keyBack)
-    , m_lcd(lcd)
+    , m_gui(gui)
     , m_touch(touch)
 {
 }
@@ -44,9 +24,6 @@ void AppController::setup()
     // 初始化指示灯
     m_led.turnOff();
 
-    // 初始化 LCD
-    m_lcd.init();
-    
     // 自检温湿传感器
     if (m_th.init() == Sys::Status::OK) {
         m_tempHumConnected = true;
@@ -70,10 +47,7 @@ void AppController::setup()
     m_data.alarmState = Sys::AlarmState::NORMAL;
     m_data.currentViewPage = 0;
     m_data.isMuted = false;
-    m_touchToggleRequested = false;
-    m_touchObservedPressed = false;
     m_tempHumSampleActive = false;
-    m_lastTouchPointValid = false;
     m_previousPage = 0;
     m_pendingTempHighLimit = m_data.tempHighLimit;
     m_pendingTempLowLimit = m_data.tempLowLimit;
@@ -88,12 +62,13 @@ void AppController::run()
     const uint32_t nowMs = HAL_GetTick();
     updateLed(10U);
     scanKeys();
-    pollTouch();
+    pollTouch(nowMs);
     processInputs();
     startSensorSample(nowMs);
     stepSensors(nowMs);
     updateStateMachine();
     refreshDisplay();
+    renderGuiTick();
 }
 
 void AppController::updateLed(uint32_t elapsedMs)
@@ -110,37 +85,12 @@ void AppController::scanKeys()
 
 void AppController::refreshDisplay()
 {
-    ILcdDisplay::RenderData renderData {
-        m_data.temperature,
-        m_data.humidity,
-        m_data.pressure,
-        m_data.altitude,
-        m_data.tempHighLimit,
-        m_data.tempLowLimit,
-        m_data.pressHighLimit,
-        m_data.pressLowLimit,
-        m_data.alarmState,
-        m_data.currentViewPage,
-        m_data.isMuted,
-        m_tempHumConnected,
-        m_pressureConnected,
-        {},
-        {},
-        0,
-        m_selectedThresholdField,
-        m_pendingTempHighLimit,
-        m_pendingTempLowLimit,
-        m_pendingPressHighLimit,
-        m_pendingPressLowLimit
-    };
+    m_gui.setModel(buildGuiModel());
+}
 
-    for (uint8_t i = 0; i < m_historyCount; ++i) {
-        renderData.tempHistory[i] = m_tempHistory[i];
-        renderData.pressHistory[i] = m_pressHistory[i];
-    }
-    renderData.historyCount = m_historyCount;
-
-    m_lcd.update(renderData);
+void AppController::renderGuiTick()
+{
+    m_gui.renderTick();
 }
 
 void AppController::startSensorSample(uint32_t nowMs)
@@ -219,39 +169,16 @@ void AppController::stepSensors(uint32_t nowMs)
     }
 }
 
-void AppController::pollTouch()
+void AppController::pollTouch(uint32_t nowMs)
 {
-    const bool touched = m_touch.isTouched();
-    if (touched) {
-        TouchPoint point{};
-        if (m_touch.readPosition(point) && point.valid) {
-            m_lastTouchPoint = point;
-            m_lastTouchPointValid = true;
-        }
-        if (!m_touchPressLogged) {
-            SYS_LOG("Touch pressed.");
-            m_touchPressLogged = true;
-        }
-        m_touchObservedPressed = true;
-        return;
-    }
+    m_touch.scanTick(nowMs);
 
-    if (m_touchObservedPressed && !m_touchToggleRequested) {
-        m_touchObservedPressed = false;
-        m_touchPressLogged = false;
-        m_touchToggleRequested = true;
-        SYS_LOG("Touch released. Source=polling fallback.");
-    } else if (!m_touchObservedPressed) {
-        m_touchPressLogged = false;
+    TouchEvent event{};
+    while (m_touch.popEvent(event)) {
+        if (event.type == TouchEvent::Type::Tap && event.point.valid) {
+            handleGuiCommand(m_gui.hitTest(event.point));
+        }
     }
-}
-
-void AppController::requestTouchToggle()
-{
-    m_touchObservedPressed = false;
-    m_touchPressLogged = false;
-    m_touchToggleRequested = true;
-    SYS_LOG("Touch release event queued from IRQ.");
 }
 
 void AppController::processInputs()
@@ -267,25 +194,6 @@ void AppController::processInputs()
         }
     }
     
-    if (m_touchToggleRequested) {
-        m_touchToggleRequested = false;
-        TouchPoint point = m_lastTouchPoint;
-        if (!m_lastTouchPointValid && m_touch.isTouched()) {
-            (void)m_touch.readPosition(point);
-        }
-
-        if (point.valid) {
-            handleTouchPoint(point);
-        } else if (m_data.currentViewPage != 2) {
-            m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
-            SYS_LOG("Touch release without coordinate: switched to page %d", m_data.currentViewPage);
-        } else {
-            SYS_LOG("Touch release ignored on threshold settings page: no coordinate.");
-        }
-        m_lastTouchPointValid = false;
-        m_lastTouchPoint.valid = false;
-    }
-
     // KEY2 用于确认/抑制当前报警状态，不再代表声音相关的静音硬件。
     if (m_keyConfirm.isPressed()) {
         if (m_data.currentViewPage == 2) {
@@ -321,6 +229,68 @@ void AppController::processInputs()
         } else {
             SYS_LOG("Back button pressed.");
         }
+    }
+}
+
+AppGui::Model AppController::buildGuiModel() const
+{
+    AppGui::Model model{};
+    model.temperature = m_data.temperature;
+    model.humidity = m_data.humidity;
+    model.pressure = m_data.pressure;
+    model.altitude = m_data.altitude;
+    model.tempHighLimit = m_data.tempHighLimit;
+    model.tempLowLimit = m_data.tempLowLimit;
+    model.pressHighLimit = m_data.pressHighLimit;
+    model.pressLowLimit = m_data.pressLowLimit;
+    model.alarmState = m_data.alarmState;
+    model.currentViewPage = m_data.currentViewPage;
+    model.isMuted = m_data.isMuted;
+    model.tempHumConnected = m_tempHumConnected;
+    model.pressureConnected = m_pressureConnected;
+    model.historyCount = m_historyCount;
+    model.selectedThresholdField = m_selectedThresholdField;
+    model.pendingTempHighLimit = m_pendingTempHighLimit;
+    model.pendingTempLowLimit = m_pendingTempLowLimit;
+    model.pendingPressHighLimit = m_pendingPressHighLimit;
+    model.pendingPressLowLimit = m_pendingPressLowLimit;
+
+    for (uint8_t i = 0; i < m_historyCount; ++i) {
+        model.tempHistory[i] = m_tempHistory[i];
+        model.pressHistory[i] = m_pressHistory[i];
+    }
+    return model;
+}
+
+void AppController::handleGuiCommand(const AppGui::Command& command)
+{
+    switch (command.type) {
+        case AppGui::Command::Type::TogglePage:
+            if (m_data.currentViewPage != 2) {
+                m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
+                SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
+            }
+            break;
+        case AppGui::Command::Type::EnterSettings:
+            enterThresholdPage();
+            break;
+        case AppGui::Command::Type::AdjustThreshold:
+            if (m_data.currentViewPage == 2) {
+                updatePendingThreshold(command.field, command.increase);
+            }
+            break;
+        case AppGui::Command::Type::Confirm:
+            if (m_data.currentViewPage == 2) {
+                applyPendingThresholds();
+            }
+            break;
+        case AppGui::Command::Type::Cancel:
+            if (m_data.currentViewPage == 2) {
+                cancelPendingThresholds();
+            }
+            break;
+        default:
+            break;
     }
 }
 
@@ -415,53 +385,6 @@ void AppController::updatePendingThreshold(uint8_t field, bool increase)
 
     m_selectedThresholdField = field;
     SYS_LOG("Threshold field %u adjusted %s.", field, increase ? "up" : "down");
-}
-
-void AppController::handleTouchPoint(const TouchPoint& pt)
-{
-    if (m_data.currentViewPage != 2) {
-        if (pt.x >= kSettingsButtonX0 && pt.x <= kSettingsButtonX1 &&
-            pt.y >= kSettingsButtonY0 && pt.y <= kSettingsButtonY1) {
-            enterThresholdPage();
-            return;
-        }
-
-        if (pt.x > (m_lcd.getWidth() / 2U) && pt.y < kPageToggleMarginY) {
-            m_data.currentViewPage = (m_data.currentViewPage == 0) ? 1 : 0;
-            SYS_LOG("Touch: switched to page %d", m_data.currentViewPage);
-        }
-        return;
-    }
-
-    for (uint8_t row = 0; row < kThresholdRowCount; ++row) {
-        const uint16_t rowY0 = 60U + static_cast<uint16_t>(row) * kThresholdRowHeight;
-        const uint16_t rowY1 = rowY0 + 32U;
-
-        if (pt.y < rowY0 || pt.y > rowY1) {
-            continue;
-        }
-
-        if (pt.x >= kThresholdRowXMinus && pt.x <= (kThresholdRowXMinus + 28U)) {
-            updatePendingThreshold(row, false);
-            return;
-        }
-
-        if (pt.x >= kThresholdRowXPlus && pt.x <= (kThresholdRowXPlus + 28U)) {
-            updatePendingThreshold(row, true);
-            return;
-        }
-    }
-
-    if (pt.y >= kThresholdControlY0 && pt.y <= kThresholdControlY1) {
-        if (pt.x >= kConfirmButtonX0 && pt.x <= kConfirmButtonX1) {
-            applyPendingThresholds();
-            return;
-        }
-        if (pt.x >= kCancelButtonX0 && pt.x <= kCancelButtonX1) {
-            cancelPendingThresholds();
-            return;
-        }
-    }
 }
 
 void AppController::logHealth()
