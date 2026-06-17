@@ -30,6 +30,7 @@ private:
     } m_calib;
 
     II2cBus& m_i2c;
+    uint8_t m_devAddr{0x76U};
     int32_t m_tFine{0}; // 气压计算必须依赖温度微调因子
     bool m_initialized{false};
 

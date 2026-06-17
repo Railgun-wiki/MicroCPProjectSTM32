@@ -16,17 +16,26 @@ Sys::Status Bmp280Bsp::init()
 
     HAL_Delay(10); // 上电复位等待
 
-    // 1. 读取 Chip ID 寄存器 0xD0，校验是否为 0x58
+    // 1. 自动探测 BMP280 的 I2C 地址 (0x76 或 0x77)
     uint8_t chipId = 0;
-    if (m_i2c.readRegs(SYS_I2C_ADDR_BMP280, 0xD0, &chipId, 1) != Sys::Status::OK) {
-        SYS_LOG("Error: Failed to read BMP280 chip ID.");
+    uint8_t detectedAddr = 0;
+
+    // 先尝试 0x76 地址
+    if (m_i2c.readRegs(0x76, 0xD0, &chipId, 1) == Sys::Status::OK && chipId == 0x58) {
+        detectedAddr = 0x76;
+    }
+    // 如果失败，尝试 0x77 地址
+    else if (m_i2c.readRegs(0x77, 0xD0, &chipId, 1) == Sys::Status::OK && chipId == 0x58) {
+        detectedAddr = 0x77;
+    }
+
+    if (detectedAddr == 0) {
+        SYS_LOG("Error: Failed to find BMP280 sensor (chip ID mismatch or communication error).");
         return Sys::Status::ERROR_INIT;
     }
-    
-    if (chipId != 0x58) {
-        SYS_LOG("Error: BMP280 chip ID mismatch! Expected 0x58, got 0x%02X", chipId);
-        return Sys::Status::ERROR_INIT;
-    }
+
+    m_devAddr = detectedAddr;
+    SYS_LOG("BMP280 sensor found and selected address 0x%02X.", m_devAddr);
 
     // 2. 一次性读取出厂标定参数 0x88 ~ 0xA1 (共 24 字节)
     if (loadCalibration() != Sys::Status::OK) {
@@ -38,7 +47,7 @@ Sys::Status Bmp280Bsp::init()
     // Standby = 500ms (100), IIR Filter = 16x (100), SPI 3-wire disabled (0)
     // 字节值: (4 << 5) | (4 << 2) = 0x80 | 0x10 = 0x90
     uint8_t configVal = 0x90;
-    if (m_i2c.writeRegs(SYS_I2C_ADDR_BMP280, 0xF5, &configVal, 1) != Sys::Status::OK) {
+    if (m_i2c.writeRegs(m_devAddr, 0xF5, &configVal, 1) != Sys::Status::OK) {
         SYS_LOG("Error: Failed to write BMP280 config register.");
         return Sys::Status::ERROR_INIT;
     }
@@ -47,7 +56,7 @@ Sys::Status Bmp280Bsp::init()
     // Temperature oversampling = 2x (010), Pressure oversampling = 16x (101), Mode = Normal (11)
     // 字节值: (2 << 5) | (5 << 2) | 3 = 0x40 | 0x14 | 0x03 = 0x57
     uint8_t ctrlMeasVal = 0x57;
-    if (m_i2c.writeRegs(SYS_I2C_ADDR_BMP280, 0xF4, &ctrlMeasVal, 1) != Sys::Status::OK) {
+    if (m_i2c.writeRegs(m_devAddr, 0xF4, &ctrlMeasVal, 1) != Sys::Status::OK) {
         SYS_LOG("Error: Failed to write BMP280 ctrl_meas register.");
         return Sys::Status::ERROR_INIT;
     }
@@ -61,7 +70,7 @@ Sys::Status Bmp280Bsp::loadCalibration()
 {
     uint8_t buffer[24] = {0};
     // 0x88 起始连续读取 24 字节
-    if (m_i2c.readRegs(SYS_I2C_ADDR_BMP280, 0x88, buffer, 24) != Sys::Status::OK) {
+    if (m_i2c.readRegs(m_devAddr, 0x88, buffer, 24) != Sys::Status::OK) {
         return Sys::Status::ERROR_COM_FAIL;
     }
 
@@ -124,7 +133,7 @@ Sys::Status Bmp280Bsp::read(uint32_t& pressure, int32_t& altitude)
 
     uint8_t buffer[6] = {0};
     // 从 0xF7 (press_msb) 起始连续读取 6 字节的数据帧
-    if (m_i2c.readRegs(SYS_I2C_ADDR_BMP280, 0xF7, buffer, 6) != Sys::Status::OK) {
+    if (m_i2c.readRegs(m_devAddr, 0xF7, buffer, 6) != Sys::Status::OK) {
         return Sys::Status::ERROR_COM_FAIL;
     }
 

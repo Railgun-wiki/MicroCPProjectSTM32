@@ -9,8 +9,10 @@
 #include "ButtonBsp.hpp"
 #include "LcdBsp.hpp"
 #include "TouchBsp.hpp"
+#include "GuiEngine.hpp"
 #include "AppController.hpp"
 #include "AppGui.hpp"
+#include <stdlib.h>
 
 #include <stdio.h>
 
@@ -40,6 +42,8 @@ static Bsp::TouchBsp g_Touch(TOUCH_TCLK_GPIO_Port, TOUCH_TCLK_Pin,
                              TOUCH_TDIN_GPIO_Port, TOUCH_TDIN_Pin,
                              TOUCH_DOUT_GPIO_Port, TOUCH_DOUT_Pin,
                              TOUCH_PEN_GPIO_Port,  TOUCH_PEN_Pin);
+
+static App::GuiEngine g_Gui(g_Lcd);
 
 static App::AppGui g_AppGui(g_Lcd);
 static App::AppController g_App(g_Aht20, g_Bmp280, g_LedIndicator,
@@ -77,6 +81,95 @@ AppTaskFlags g_taskFlags;
 
 } // namespace
 
+static void runTouchCalibration()
+{
+    g_Lcd.clear(0xFFFF); // Clear to white
+    
+    // Draw instructions
+    g_Lcd.drawString(20, 100, "Touch Screen Calibration", 0xF800, 0xFFFF, 16);
+    g_Lcd.drawString(20, 130, "Please click the red targets in sequence.", 0x0000, 0xFFFF, 12);
+    g_Lcd.drawString(20, 160, "Use a stylus for better accuracy.", 0x0000, 0xFFFF, 12);
+
+    uint16_t targets[4][2] = {
+        {20, 20},
+        {460, 20},
+        {20, 300},
+        {460, 300}
+    };
+    uint16_t raw_coords[4][2] = {0};
+
+    auto drawTarget = [](uint16_t tx, uint16_t ty, uint16_t color) {
+        g_Gui.drawLine(tx - 12, ty, tx + 12, ty, color);
+        g_Gui.drawLine(tx, ty - 12, tx, ty + 12, color);
+        g_Gui.drawCircle(tx, ty, 6, color, false);
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        drawTarget(targets[i][0], targets[i][1], 0xF800); // Draw in red
+
+        // Wait for touch press
+        while (!g_Touch.isTouched()) {
+            HAL_Delay(10);
+        }
+
+        // Read raw coordinates while touched
+        uint32_t sumX = 0, sumY = 0;
+        int samples = 0;
+        while (g_Touch.isTouched()) {
+            uint16_t rx = 0, ry = 0;
+            if (g_Touch.readRaw(rx, ry)) {
+                sumX += rx;
+                sumY += ry;
+                samples++;
+            }
+            HAL_Delay(20);
+        }
+
+        if (samples > 0) {
+            raw_coords[i][0] = sumX / samples;
+            raw_coords[i][1] = sumY / samples;
+        }
+
+        drawTarget(targets[i][0], targets[i][1], 0xFFFF); // Erase in white
+        HAL_Delay(500); // Debounce delay
+    }
+
+    int32_t x_left = (raw_coords[0][0] + raw_coords[2][0]) / 2;
+    int32_t x_right = (raw_coords[1][0] + raw_coords[3][0]) / 2;
+    int32_t y_top = (raw_coords[0][1] + raw_coords[1][1]) / 2;
+    int32_t y_bottom = (raw_coords[2][1] + raw_coords[3][1]) / 2;
+
+    int16_t xMin = 0, xMax = 0, yMin = 0, yMax = 0;
+
+    if (abs(x_right - x_left) < 100 || abs(y_bottom - y_top) < 100) {
+        xMin = 300; xMax = 3900;
+        yMin = 200; yMax = 3800;
+        g_Touch.setCalibration(xMin, xMax, yMin, yMax);
+        g_Lcd.clear(0xFFFF);
+        g_Lcd.drawString(20, 120, "Calibration Failed!", 0xF800, 0xFFFF, 16);
+        g_Lcd.drawString(20, 150, "Using default parameters.", 0x0000, 0xFFFF, 12);
+        HAL_Delay(2000);
+    } else {
+        xMin = x_left - 20 * (x_right - x_left) / 440;
+        xMax = x_right + 20 * (x_right - x_left) / 440;
+        yMin = y_top - 20 * (y_bottom - y_top) / 280;
+        yMax = y_bottom + 20 * (y_bottom - y_top) / 280;
+
+        g_Touch.setCalibration(xMin, xMax, yMin, yMax);
+        
+        g_Lcd.clear(0xFFFF);
+        g_Lcd.drawString(20, 120, "Calibration Successful!", 0x07E0, 0xFFFF, 16);
+        char buf[64];
+        sprintf(buf, "X Range: [%d, %d]", xMin, xMax);
+        g_Lcd.drawString(20, 150, buf, 0x0000, 0xFFFF, 12);
+        sprintf(buf, "Y Range: [%d, %d]", yMin, yMax);
+        g_Lcd.drawString(20, 170, buf, 0x0000, 0xFFFF, 12);
+        HAL_Delay(3000);
+    }
+
+    g_Lcd.clear(0xFFFF);
+}
+
 void App_Init(void)
 {
     SYS_LOG("Booting C++ application entry point...");
@@ -88,14 +181,24 @@ void App_Init(void)
     // Diagnostic I2C scanner on boot
     g_Lcd.init();
 
+    if (touchReady) {
+        if (HAL_GPIO_ReadPin(KEY_PAGE_GPIO_Port, KEY_PAGE_Pin) == GPIO_PIN_RESET) {
+            runTouchCalibration();
+        } else {
+            g_Touch.setCalibration(300, 3900, 200, 3800);
+        }
+    }
+
     bool aht20Connected = false;
     bool bmp280Connected = false;
+    SYS_LOG("Scanning I2C bus...");
     for (uint16_t i = 1; i < 128; i++) {
-        if (HAL_I2C_IsDeviceReady(&hi2c2, i << 1, 1, 10) == HAL_OK) {
+        if (HAL_I2C_IsDeviceReady(&hi2c2, i << 1, 1, 2) == HAL_OK) {
+            SYS_LOG("  Found I2C device at address 0x%02X", i);
             if (i == SYS_I2C_ADDR_AHT20) {
                 aht20Connected = true;
             }
-            if (i == SYS_I2C_ADDR_BMP280) {
+            if (i == SYS_I2C_ADDR_BMP280 || i == 0x77) {
                 bmp280Connected = true;
             }
         }

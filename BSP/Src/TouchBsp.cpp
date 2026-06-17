@@ -50,31 +50,34 @@ uint16_t TouchBsp::readChannel(uint8_t cmd)
 
     // 发送 8-bit 命令
     for (uint8_t i = 0; i < 8; ++i) {
+        clkLow();
         if (cmd & 0x80) {
             dinHigh();
         } else {
             dinLow();
         }
         cmd <<= 1;
-        clkLow();
-        delayUs(1);
+        delayUs(3);
         clkHigh();
-        delayUs(1);
+        delayUs(3);
     }
 
-    // 等待转换完成（XPT2046 最长 6us）
-    delayUs(6);
+    // 拉低时钟线，产生第 8 次下降沿，启动转换
+    clkLow();
+    dinLow();
+    // 等待转换完成（XPT2046 最长 6us，给 15us 确保绝对稳定）
+    delayUs(15);
 
-    // 读取 12-bit 结果
+    // 读取 12-bit 结果 (SPI Mode 0)
     for (uint8_t i = 0; i < 12; ++i) {
-        num <<= 1;
         clkHigh();
-        delayUs(1);
-        clkLow();
-        delayUs(1);
+        delayUs(3);
+        num <<= 1;
         if (HAL_GPIO_ReadPin(m_outPort, m_outPin) == GPIO_PIN_SET) {
             num |= 1;
         }
+        clkLow();
+        delayUs(3);
     }
 
     csHigh();
@@ -125,8 +128,8 @@ void TouchBsp::scanTick(uint32_t nowMs)
         }
 
         if (m_sampleCount < 5U) {
-            const uint16_t rawX = readChannel(0xD0);
-            const uint16_t rawY = readChannel(0x90);
+            const uint16_t rawX = readChannel(0x90); // Screen X -> Y-axis measurement (0x90)
+            const uint16_t rawY = readChannel(0xD0); // Screen Y -> X-axis measurement (0xD0)
             m_sumX += rawX;
             m_sumY += rawY;
             ++m_sampleCount;
@@ -150,6 +153,22 @@ bool TouchBsp::popEvent(App::TouchEvent& event)
     }
     event = m_pendingEvent;
     m_eventPending = false;
+    return true;
+}
+
+bool TouchBsp::readRaw(uint16_t& rawX, uint16_t& rawY)
+{
+    if (!isTouched()) {
+        return false;
+    }
+    uint32_t sumX = 0, sumY = 0;
+    for (int i = 0; i < 8; ++i) {
+        sumX += readChannel(0x90); // Screen X -> Y-axis measurement (0x90)
+        sumY += readChannel(0xD0); // Screen Y -> X-axis measurement (0xD0)
+        delayUs(100);
+    }
+    rawX = sumX / 8;
+    rawY = sumY / 8;
     return true;
 }
 

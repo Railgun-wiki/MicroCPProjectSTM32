@@ -21,6 +21,7 @@ public:
     // 校准参数设置（app_entry.cpp 在初始化后调用）
     void setCalibration(int16_t xMin, int16_t xMax,
                         int16_t yMin, int16_t yMax);
+    bool readRaw(uint16_t& rawX, uint16_t& rawY);
 
 private:
     GPIO_TypeDef* m_clkPort;  uint16_t m_clkPin;

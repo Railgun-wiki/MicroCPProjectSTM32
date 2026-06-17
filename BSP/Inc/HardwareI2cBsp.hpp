@@ -17,7 +17,7 @@ public:
     Sys::Status directWrite(uint8_t devAddr, const uint8_t* pData, uint16_t len) override;
 
 private:
-    static constexpr uint32_t kTimeoutMs = 100U;
+    static constexpr uint32_t kTimeoutMs = 10U;
 
     I2C_HandleTypeDef* m_hi2c;
 

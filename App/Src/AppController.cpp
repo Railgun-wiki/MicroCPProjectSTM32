@@ -97,38 +97,56 @@ void AppController::startSensorSample(uint32_t nowMs)
 {
     if (!m_tempHumSampleActive) {
         const bool wasConnected = m_tempHumConnected;
-        const Sys::Status tempStatus = m_th.beginSample(nowMs);
-        if (tempStatus == Sys::Status::OK || tempStatus == Sys::Status::ERROR_BUSY) {
-            m_tempHumSampleActive = true;
-            if (!wasConnected) {
-                SYS_LOG("AHT20 communication recovered. Sampling resumed.");
-            }
-        } else {
-            m_tempHumConnected = false;
-            if (wasConnected) {
-                SYS_LOG("AHT20 communication lost. beginSample status=%d", static_cast<int>(tempStatus));
+        bool shouldStartTempHum = m_tempHumConnected;
+        static uint32_t lastTempHumRetryMs = 0;
+        if (!m_tempHumConnected && (nowMs - lastTempHumRetryMs >= 5000U)) {
+            shouldStartTempHum = true;
+            lastTempHumRetryMs = nowMs;
+        }
+
+        if (shouldStartTempHum) {
+            const Sys::Status tempStatus = m_th.beginSample(nowMs);
+            if (tempStatus == Sys::Status::OK || tempStatus == Sys::Status::ERROR_BUSY) {
+                m_tempHumSampleActive = true;
+                if (!wasConnected) {
+                    SYS_LOG("AHT20 communication recovered. Sampling resumed.");
+                }
+            } else {
+                m_tempHumConnected = false;
+                if (wasConnected) {
+                    SYS_LOG("AHT20 communication lost. beginSample status=%d", static_cast<int>(tempStatus));
+                }
             }
         }
     }
 
     const bool wasPressureConnected = m_pressureConnected;
-    uint32_t press{0};
-    int32_t alt{0};
-    const Sys::Status pressStatus = m_press.read(press, alt);
-    if (pressStatus == Sys::Status::OK) {
-        m_data.pressure = press;
-        m_data.altitude = alt;
-        m_pressureConnected = true;
-        if (!wasPressureConnected) {
-            SYS_LOG("BMP280 data recovered. Pressure=%lu Pa Altitude=%ld.%ld m",
-                    (unsigned long)m_data.pressure,
-                    (long)(m_data.altitude / 10),
-                    (long)abs(m_data.altitude % 10));
-        }
-    } else {
-        m_pressureConnected = false;
-        if (wasPressureConnected) {
-            SYS_LOG("BMP280 communication lost. read status=%d", static_cast<int>(pressStatus));
+    bool shouldReadPressure = m_pressureConnected;
+    static uint32_t lastPressureRetryMs = 0;
+    if (!m_pressureConnected && (nowMs - lastPressureRetryMs >= 5000U)) {
+        shouldReadPressure = true;
+        lastPressureRetryMs = nowMs;
+    }
+
+    if (shouldReadPressure) {
+        uint32_t press{0};
+        int32_t alt{0};
+        const Sys::Status pressStatus = m_press.read(press, alt);
+        if (pressStatus == Sys::Status::OK) {
+            m_data.pressure = press;
+            m_data.altitude = alt;
+            m_pressureConnected = true;
+            if (!wasPressureConnected) {
+                SYS_LOG("BMP280 data recovered. Pressure=%lu Pa Altitude=%ld.%ld m",
+                        (unsigned long)m_data.pressure,
+                        (long)(m_data.altitude / 10),
+                        (long)abs(m_data.altitude % 10));
+            }
+        } else {
+            m_pressureConnected = false;
+            if (wasPressureConnected) {
+                SYS_LOG("BMP280 communication lost. read status=%d", static_cast<int>(pressStatus));
+            }
         }
     }
 
