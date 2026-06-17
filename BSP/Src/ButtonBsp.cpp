@@ -1,5 +1,6 @@
 // BSP/Src/ButtonBsp.cpp
 #include "ButtonBsp.hpp"
+#include "sys.hpp"
 
 namespace Bsp {
 
@@ -28,6 +29,7 @@ void ButtonBsp::scanTick()
             if (m_debounceCounter >= 2) { // 连续 20ms 稳定低电平，判定有效按下
                 m_triggered = true;
                 m_lastState = false; // 锁定按键状态，防止连击
+                SYS_LOG("Button GPIO Pin 0x%04X pressed.", m_pin);
             }
         }
     } else { // 按键高电平释放

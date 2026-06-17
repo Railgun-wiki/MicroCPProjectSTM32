@@ -217,14 +217,20 @@ void AppController::processInputs()
         if (m_data.currentViewPage == 2) {
             applyPendingThresholds();
             SYS_LOG("Confirm button pressed. Threshold changes applied.");
-        } else if (m_data.alarmState == Sys::AlarmState::WARNING_TEMP ||
-            m_data.alarmState == Sys::AlarmState::WARNING_PRES) {
-            m_data.isMuted = true;
-            m_data.alarmState = Sys::AlarmState::MUTED;
-            SYS_LOG("Confirm button pressed. Alarm indication suppressed.");
-        } else if (m_data.alarmState == Sys::AlarmState::MUTED) {
-            m_data.isMuted = false;
-            SYS_LOG("Confirm button pressed. Alarm indication restored.");
+        } else {
+            m_data.isMuted = !m_data.isMuted;
+            if (m_data.isMuted) {
+                if (m_data.alarmState == Sys::AlarmState::WARNING_TEMP ||
+                    m_data.alarmState == Sys::AlarmState::WARNING_PRES) {
+                    m_data.alarmState = Sys::AlarmState::MUTED;
+                }
+                SYS_LOG("Confirm button pressed. MUTE is ON.");
+            } else {
+                if (m_data.alarmState == Sys::AlarmState::MUTED) {
+                    m_data.alarmState = Sys::AlarmState::NORMAL;
+                }
+                SYS_LOG("Confirm button pressed. MUTE is OFF.");
+            }
         }
     }
 
