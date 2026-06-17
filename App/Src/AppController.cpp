@@ -70,7 +70,10 @@ void AppController::run()
     // 每 10 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录
     static uint32_t lastHistoryMs = 0;
     if (lastHistoryMs == 0) {
-        lastHistoryMs = nowMs;
+        if (m_tempHumConnected || m_pressureConnected) {
+            appendHistory(m_data.temperature, m_data.pressure);
+            lastHistoryMs = nowMs;
+        }
     } else if (nowMs - lastHistoryMs >= 10000U) {
         lastHistoryMs = nowMs;
         if (m_tempHumConnected || m_pressureConnected) {
