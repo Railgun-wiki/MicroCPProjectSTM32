@@ -38,7 +38,7 @@ public:
         uint32_t pressure{0};
         int32_t altitude{0};
         
-        int32_t tempHighLimit{350};
+        int32_t tempHighLimit{290};
         int32_t tempLowLimit{100};
         uint32_t pressHighLimit{103000}; // 1030 hPa
         uint32_t pressLowLimit{98000};   // 980 hPa
@@ -57,7 +57,7 @@ public:
 
 private:
     static constexpr uint16_t kHistorySize = 300;
-    static constexpr int32_t kTempStep = 1;       // 0.1 C
+    static constexpr int32_t kTempStep = 10;       // 1.0 C
     static constexpr uint32_t kPressStep = 100;   // 0.1 kPa
 
     ITempHumSensor& m_th;
@@ -77,7 +77,7 @@ private:
     bool m_tempHumSampleActive{false};
 
     uint8_t m_previousPage{0};
-    int32_t m_pendingTempHighLimit{350};
+    int32_t m_pendingTempHighLimit{290};
     int32_t m_pendingTempLowLimit{100};
     uint32_t m_pendingPressHighLimit{103000};
     uint32_t m_pendingPressLowLimit{98000};

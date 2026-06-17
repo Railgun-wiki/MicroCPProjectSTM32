@@ -16,7 +16,7 @@ public:
         uint32_t pressure{0};
         int32_t altitude{0};
 
-        int32_t tempHighLimit{350};
+        int32_t tempHighLimit{290};
         int32_t tempLowLimit{100};
         uint32_t pressHighLimit{103000};
         uint32_t pressLowLimit{98000};
@@ -33,7 +33,7 @@ public:
         uint16_t historyCount{0};
 
         uint8_t selectedThresholdField{0};
-        int32_t pendingTempHighLimit{350};
+        int32_t pendingTempHighLimit{290};
         int32_t pendingTempLowLimit{100};
         uint32_t pendingPressHighLimit{103000};
         uint32_t pendingPressLowLimit{98000};
