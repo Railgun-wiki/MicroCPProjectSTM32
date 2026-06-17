@@ -40,6 +40,8 @@ private:
     uint32_t m_sumY{0};
     App::TouchPoint m_lastPoint{0, 0, false};
     App::TouchEvent m_pendingEvent{};
+    uint16_t m_tempX[8]{0};
+    uint16_t m_tempY[8]{0};
 
     // Bit-bang SPI 助手
     inline void clkLow()  { HAL_GPIO_WritePin(m_clkPort, m_clkPin, GPIO_PIN_RESET); }

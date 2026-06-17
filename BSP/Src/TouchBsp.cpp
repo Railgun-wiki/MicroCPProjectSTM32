@@ -127,21 +127,61 @@ void TouchBsp::scanTick(uint32_t nowMs)
             m_wasTouched = true;
         }
 
-        if (m_sampleCount < 5U) {
+        if (m_sampleCount < 8U) {
             const uint16_t rawX = readChannel(0x90); // Screen X -> Y-axis measurement (0x90)
             const uint16_t rawY = readChannel(0xD0); // Screen Y -> X-axis measurement (0xD0)
-            m_sumX += rawX;
-            m_sumY += rawY;
-            ++m_sampleCount;
-            m_lastPoint = calibrate(static_cast<uint16_t>(m_sumX / m_sampleCount),
-                                    static_cast<uint16_t>(m_sumY / m_sampleCount));
+            
+            // Only collect if the raw read is reasonably valid
+            if (rawX > 50 && rawY > 50) {
+                m_tempX[m_sampleCount] = rawX;
+                m_tempY[m_sampleCount] = rawY;
+                ++m_sampleCount;
+            }
         }
         return;
     }
 
     if (m_wasTouched) {
         m_wasTouched = false;
-        publish(App::TouchEvent::Type::Tap, m_lastPoint);
+        if (m_sampleCount >= 3U) {
+            // Sort arrays to find median / average middle values
+            for (uint8_t i = 0; i < m_sampleCount - 1; ++i) {
+                for (uint8_t j = i + 1; j < m_sampleCount; ++j) {
+                    if (m_tempX[i] > m_tempX[j]) {
+                        uint16_t temp = m_tempX[i];
+                        m_tempX[i] = m_tempX[j];
+                        m_tempX[j] = temp;
+                    }
+                    if (m_tempY[i] > m_tempY[j]) {
+                        uint16_t temp = m_tempY[i];
+                        m_tempY[i] = m_tempY[j];
+                        m_tempY[j] = temp;
+                    }
+                }
+            }
+
+            uint32_t sumX = 0, sumY = 0;
+            uint16_t count = 0;
+            // Discard lowest and highest samples if we have enough
+            uint16_t start = 0;
+            uint16_t end = m_sampleCount;
+            if (m_sampleCount >= 4U) {
+                start = 1;
+                end = m_sampleCount - 1;
+            }
+            for (uint16_t i = start; i < end; ++i) {
+                sumX += m_tempX[i];
+                sumY += m_tempY[i];
+                count++;
+            }
+
+            if (count > 0) {
+                uint16_t finalX = static_cast<uint16_t>(sumX / count);
+                uint16_t finalY = static_cast<uint16_t>(sumY / count);
+                m_lastPoint = calibrate(finalX, finalY);
+                publish(App::TouchEvent::Type::Tap, m_lastPoint);
+            }
+        }
         resetSamples();
     }
 }

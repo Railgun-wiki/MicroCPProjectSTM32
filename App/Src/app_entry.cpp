@@ -185,7 +185,7 @@ void App_Init(void)
         if (HAL_GPIO_ReadPin(KEY_PAGE_GPIO_Port, KEY_PAGE_Pin) == GPIO_PIN_RESET) {
             runTouchCalibration();
         } else {
-            g_Touch.setCalibration(300, 3900, 200, 3800);
+            g_Touch.setCalibration(314, 1976, 62, 1815);
         }
     }
 

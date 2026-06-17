@@ -12,7 +12,7 @@
 #define SYS_I2C_ADDR_BMP280     0x76U
 
 // 3. 项目组号显示配置
-#define SYS_GROUP_NUMBER        0U
+#define SYS_GROUP_NUMBER        3U
 
 // 4. 调试输出日志开关
 #define SYS_DEBUG_ENABLED       1
