@@ -450,7 +450,7 @@ void AppGui::drawGraphWaitingOrLine()
 void AppGui::drawGraphAppend()
 {
     const bool pressure = m_planPage == 1;
-    const uint8_t index = static_cast<uint8_t>(m_planModel.historyCount - 1U);
+    const uint16_t index = static_cast<uint16_t>(m_planModel.historyCount - 1U);
     uint16_t x0 = graphXForIndex(index - 1U, kGraphX0 + 1U, kGraphX1 - 1U);
     uint16_t x1 = graphXForIndex(index, kGraphX0 + 1U, kGraphX1 - 1U);
     if (pressure) {
@@ -683,7 +683,7 @@ bool AppGui::canAppendGraphSegment(const Model& previous, const Model& next, boo
     if (next.historyCount < 2 || next.historyCount != previous.historyCount + 1U) {
         return false;
     }
-    for (uint8_t i = 0; i < previous.historyCount; ++i) {
+    for (uint16_t i = 0; i < previous.historyCount; ++i) {
         if (previous.tempHistory[i] != next.tempHistory[i] ||
             previous.pressHistory[i] != next.pressHistory[i]) {
             return false;
@@ -698,7 +698,7 @@ bool AppGui::historyChanged(const Model& a, const Model& b) const
     if (a.historyCount != b.historyCount) {
         return true;
     }
-    for (uint8_t i = 0; i < a.historyCount; ++i) {
+    for (uint16_t i = 0; i < a.historyCount; ++i) {
         if (a.tempHistory[i] != b.tempHistory[i] || a.pressHistory[i] != b.pressHistory[i]) {
             return true;
         }
@@ -766,7 +766,7 @@ void AppGui::tempRange(const Model& model, int32_t& minValue, int32_t& maxValue)
 {
     minValue = model.tempHistory[0];
     maxValue = model.tempHistory[0];
-    for (uint8_t i = 1; i < model.historyCount; ++i) {
+    for (uint16_t i = 1; i < model.historyCount; ++i) {
         minValue = (model.tempHistory[i] < minValue) ? model.tempHistory[i] : minValue;
         maxValue = (model.tempHistory[i] > maxValue) ? model.tempHistory[i] : maxValue;
     }
@@ -781,7 +781,7 @@ void AppGui::pressRange(const Model& model, uint32_t& minValue, uint32_t& maxVal
 {
     minValue = model.pressHistory[0];
     maxValue = model.pressHistory[0];
-    for (uint8_t i = 1; i < model.historyCount; ++i) {
+    for (uint16_t i = 1; i < model.historyCount; ++i) {
         minValue = (model.pressHistory[i] < minValue) ? model.pressHistory[i] : minValue;
         maxValue = (model.pressHistory[i] > maxValue) ? model.pressHistory[i] : maxValue;
     }
@@ -792,7 +792,7 @@ void AppGui::pressRange(const Model& model, uint32_t& minValue, uint32_t& maxVal
     }
 }
 
-uint16_t AppGui::graphXForIndex(uint8_t index, uint16_t x0, uint16_t x1) const
+uint16_t AppGui::graphXForIndex(uint16_t index, uint16_t x0, uint16_t x1) const
 {
     return static_cast<uint16_t>(x0 + (static_cast<uint32_t>(x1 - x0) * index) / (kHistorySize - 1U));
 }

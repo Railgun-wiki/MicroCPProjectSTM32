@@ -8,7 +8,7 @@ namespace App {
 
 class AppGui {
 public:
-    static constexpr uint8_t kHistorySize = 30;
+    static constexpr uint16_t kHistorySize = 300;
 
     struct Model {
         int32_t temperature{0};
@@ -30,7 +30,7 @@ public:
 
         int32_t tempHistory[kHistorySize]{};
         uint32_t pressHistory[kHistorySize]{};
-        uint8_t historyCount{0};
+        uint16_t historyCount{0};
 
         uint8_t selectedThresholdField{0};
         int32_t pendingTempHighLimit{350};
@@ -99,7 +99,7 @@ private:
 
     RenderStage m_stage{RenderStage::Idle};
     uint16_t m_bandY{0};
-    uint8_t m_graphIndex{1};
+    uint16_t m_graphIndex{1};
     uint8_t m_settingsRow{0};
     uint8_t m_textStep{0};
     uint8_t m_dirtyFlags{kDirtyNone};
@@ -135,7 +135,7 @@ private:
     bool pressGraphRangeChanged(const Model& previous, const Model& next) const;
     void tempRange(const Model& model, int32_t& minValue, int32_t& maxValue) const;
     void pressRange(const Model& model, uint32_t& minValue, uint32_t& maxValue) const;
-    uint16_t graphXForIndex(uint8_t index, uint16_t x0, uint16_t x1) const;
+    uint16_t graphXForIndex(uint16_t index, uint16_t x0, uint16_t x1) const;
     uint16_t graphYForValue(int32_t value, int32_t minValue, int32_t maxValue,
                             uint16_t y0, uint16_t y1) const;
 };

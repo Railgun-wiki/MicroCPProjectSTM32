@@ -67,14 +67,14 @@ void AppController::run()
     startSensorSample(nowMs);
     stepSensors(nowMs);
 
-    // 每 10 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录
+    // 每 1 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录
     static uint32_t lastHistoryMs = 0;
     if (lastHistoryMs == 0) {
         if (m_tempHumConnected || m_pressureConnected) {
             appendHistory(m_data.temperature, m_data.pressure);
             lastHistoryMs = nowMs;
         }
-    } else if (nowMs - lastHistoryMs >= 10000U) {
+    } else if (nowMs - lastHistoryMs >= 1000U) {
         lastHistoryMs = nowMs;
         if (m_tempHumConnected || m_pressureConnected) {
             appendHistory(m_data.temperature, m_data.pressure);
@@ -327,7 +327,7 @@ void AppController::appendHistory(int32_t temperature, uint32_t pressure)
         return;
     }
 
-    for (uint8_t i = 0; i < kHistorySize - 1; ++i) {
+    for (uint16_t i = 0; i < kHistorySize - 1; ++i) {
         m_tempHistory[i] = m_tempHistory[i + 1];
         m_pressHistory[i] = m_pressHistory[i + 1];
     }

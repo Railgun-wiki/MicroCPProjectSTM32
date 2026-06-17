@@ -56,7 +56,7 @@ public:
     void setPressureLimits(uint32_t high, uint32_t low);
 
 private:
-    static constexpr uint8_t kHistorySize = 30;
+    static constexpr uint16_t kHistorySize = 300;
     static constexpr int32_t kTempStep = 1;       // 0.1 C
     static constexpr uint32_t kPressStep = 100;   // 0.1 kPa
 
@@ -85,7 +85,7 @@ private:
 
     int32_t m_tempHistory[kHistorySize]{};
     uint32_t m_pressHistory[kHistorySize]{};
-    uint8_t m_historyCount{0};
+    uint16_t m_historyCount{0};
 
     AppGui::Model buildGuiModel() const;
     void handleGuiCommand(const AppGui::Command& command);
