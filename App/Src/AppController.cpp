@@ -234,24 +234,14 @@ void AppController::processInputs()
         }
     }
 
-    // KEY3 用于返回默认页面，并在已确认状态下允许恢复到未确认的告警展示。
+    // KEY3 (KEY_BACK) 用于进入/退出 Settings 页面。
     if (m_keyBack.isPressed()) {
         if (m_data.currentViewPage == 2) {
             cancelPendingThresholds();
-            SYS_LOG("Back button pressed. Threshold changes canceled.");
-            return;
-        }
-
-        const bool pageChanged = (m_data.currentViewPage != 0);
-        m_data.currentViewPage = 0;
-
-        if (m_data.alarmState == Sys::AlarmState::MUTED) {
-            m_data.isMuted = false;
-            SYS_LOG("Back button pressed. Returned to page 0 and restored alarm indication.");
-        } else if (pageChanged) {
-            SYS_LOG("Back button pressed. Returned to page 0.");
+            SYS_LOG("Back button pressed. Exited settings page (changes canceled).");
         } else {
-            SYS_LOG("Back button pressed.");
+            enterThresholdPage();
+            SYS_LOG("Back button pressed. Entered settings page.");
         }
     }
 }
