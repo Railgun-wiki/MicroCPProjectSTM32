@@ -67,20 +67,6 @@ void AppController::run()
     startSensorSample(nowMs);
     stepSensors(nowMs);
 
-    // 每 1 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录
-    static uint32_t lastHistoryMs = 0;
-    if (lastHistoryMs == 0) {
-        if (m_tempHumConnected || m_pressureConnected) {
-            appendHistory(m_data.temperature, m_data.pressure);
-            lastHistoryMs = nowMs;
-        }
-    } else if (nowMs - lastHistoryMs >= 1000U) {
-        lastHistoryMs = nowMs;
-        if (m_tempHumConnected || m_pressureConnected) {
-            appendHistory(m_data.temperature, m_data.pressure);
-        }
-    }
-
     updateStateMachine();
     refreshDisplay();
     renderGuiTick();
@@ -110,6 +96,20 @@ void AppController::renderGuiTick()
 
 void AppController::startSensorSample(uint32_t nowMs)
 {
+    // 每 1 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录 (kHistorySize = 300)
+    static uint32_t lastHistoryMs = 0;
+    if (lastHistoryMs == 0) {
+        if (m_tempHumConnected || m_pressureConnected) {
+            appendHistory(m_data.temperature, m_data.pressure);
+            lastHistoryMs = nowMs;
+        }
+    } else if (nowMs - lastHistoryMs >= 1000U) {
+        lastHistoryMs = nowMs;
+        if (m_tempHumConnected || m_pressureConnected) {
+            appendHistory(m_data.temperature, m_data.pressure);
+        }
+    }
+
     if (!m_tempHumSampleActive) {
         const bool wasConnected = m_tempHumConnected;
         bool shouldStartTempHum = m_tempHumConnected;
