@@ -66,6 +66,18 @@ void AppController::run()
     processInputs();
     startSensorSample(nowMs);
     stepSensors(nowMs);
+
+    // 每 10 秒向历史缓冲区追加一次最新的传感器数据，确保 5 分钟图表记录
+    static uint32_t lastHistoryMs = 0;
+    if (lastHistoryMs == 0) {
+        lastHistoryMs = nowMs;
+    } else if (nowMs - lastHistoryMs >= 10000U) {
+        lastHistoryMs = nowMs;
+        if (m_tempHumConnected || m_pressureConnected) {
+            appendHistory(m_data.temperature, m_data.pressure);
+        }
+    }
+
     updateStateMachine();
     refreshDisplay();
     renderGuiTick();
@@ -149,10 +161,6 @@ void AppController::startSensorSample(uint32_t nowMs)
             }
         }
     }
-
-    if (m_pressureConnected && !m_tempHumSampleActive) {
-        appendHistory(m_data.temperature, m_data.pressure);
-    }
 }
 
 void AppController::stepSensors(uint32_t nowMs)
@@ -170,7 +178,6 @@ void AppController::stepSensors(uint32_t nowMs)
         m_data.humidity = hum;
         m_tempHumConnected = true;
         m_tempHumSampleActive = false;
-        appendHistory(m_data.temperature, m_data.pressure);
         if (!wasConnected) {
             SYS_LOG("AHT20 data recovered. Temperature=%ld.%ld C Humidity=%ld.%ld %%",
                     (long)(m_data.temperature / 10),
