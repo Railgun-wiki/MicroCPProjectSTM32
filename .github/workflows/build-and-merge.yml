@@ -12,35 +12,58 @@ permissions:
 
 jobs:
   build:
-    if: ${{ !startsWith(github.event.head_commit.message, 'doc') && !startsWith(github.event.pull_request.title, 'doc') }}
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.event.pull_request.title, 'doc') }}
     name: Build Firmware
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Install ARM Toolchain & CMake
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
+      - name: Install ARM Toolchain & CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            gcc-arm-none-eabi \
+            binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib
+
+      - name: Configure CMake Release
+        run: |
           cmake \
-          gcc-arm-none-eabi \
-          binutils-arm-none-eabi \
-          libnewlib-arm-none-eabi \
-          libstdc++-arm-none-eabi-newlib
+            -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -B build
 
-    - name: Configure CMake
-      run: |
-        cmake -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake -B build
+      - name: Build Project
+        run: |
+          cmake --build build --parallel
 
-    - name: Build Project
-      run: |
-        cmake --build build --config Debug
+      - name: Firmware size report
+        run: |
+          arm-none-eabi-size build/MicroCPProjectSTM32.elf
+          arm-none-eabi-size -A build/MicroCPProjectSTM32.elf
 
-    - name: Auto-merge PR on Success
-      if: github.event_name == 'pull_request' && success()
-      run: |
-        gh pr merge --auto --merge "${{ github.event.pull_request.html_url }}"
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "## Largest symbols" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          arm-none-eabi-nm -S --size-sort build/MicroCPProjectSTM32.elf \
+            | arm-none-eabi-c++filt \
+            | tail -80 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-release
+          path: |
+            build/MicroCPProjectSTM32.elf
+            build/MicroCPProjectSTM32.map
+
+      - name: Auto-merge PR on Success
+        if: github.event_name == 'pull_request' && success()
+        run: |
+          gh pr merge --auto --merge "${{ github.event.pull_request.html_url }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
