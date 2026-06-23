@@ -15,7 +15,7 @@
 #define SYS_GROUP_NUMBER        3U
 
 // 4. 调试输出日志开关
-#define SYS_DEBUG_ENABLED       1
+#define SYS_DEBUG_ENABLED       0
 
 #if SYS_DEBUG_ENABLED
     #include <stdio.h>
